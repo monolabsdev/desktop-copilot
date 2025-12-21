@@ -1,2 +1,40 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+
+@layer base {
+    :root,
+    .light,
+    .default,
+    [data-theme="light"],
+    [data-theme="default"] {
+        --background: oklch(0.97 0 1 / 0.6);
+        --surface: oklch(1 0 0 / 0.55);
+        --overlay: oklch(1 0 0 / 0.6);
+        --default: oklch(0.94 0.001 286.375 / 0.55);
+        --segment: oklch(1 0 0 / 0.5);
+        --field-background: transparent;
+        --field-on-background: oklch(1 0 0);
+        --field-border: oklch(1 0 0 / 0.25);
+        --field-shadow: 0 0 0 0 transparent;
+    }
+
+    .dark,
+    [data-theme="dark"] {
+        --background: oklch(12% 0.005 285.823 / 0.6);
+        --surface: oklch(0.2103 0.0059 285.89 / 0.55);
+        --overlay: oklch(0.22 0.0059 285.89 / 0.6);
+        --default: oklch(27.4% 0.006 286.033 / 0.55);
+        --segment: oklch(0.3964 0.01 285.93 / 0.5);
+        --field-background: transparent;
+        --field-on-background: oklch(1 0 0);
+        --field-border: oklch(1 0 0 / 0.2);
+        --field-shadow: 0 0 0 0 transparent;
+    }
+    [data-slot="input"] {
+        color: white !important;
+    }
+
+    [data-slot="input"]::placeholder {
+        color: rgba(255, 255, 255, 0.4) !important;
+    }
+}

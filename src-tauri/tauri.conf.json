@@ -15,7 +15,7 @@
         "label": "overlay",
         "title": "AI Overlay",
         "width": 500,
-        "height": 300,
+        "height": 500,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
