@@ -6,6 +6,11 @@ Ollama server.
 
 Important: Ollama is not bundled. You must install and run it yourself.
 
+Supported Operating Systems:
+[x] Windows
+[ ] MacOS
+[ ] Linux
+
 ## Quick start
 
 Requirements:
@@ -92,6 +97,8 @@ Windows Media OCR and may prompt for a language pack if one is missing.
   like a screen recorder: only use it where you have permission.
 - The AI runs locally via Ollama. Large models are slow and memory-heavy.
 - Global hotkeys can conflict with other apps. Adjust them in the config.
+
+- ONLY WAY TO CLOSE THE APP IS FROM TASK MANAGER AT THE MOMENT.
 
 ## Disclaimer (read this if you plan to hack on it)
 
