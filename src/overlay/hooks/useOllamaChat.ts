@@ -17,8 +17,42 @@ type ToolOptions = {
   afterCapture?: () => Promise<void> | void;
 };
 
+type ChatMessage = Message & {
+  thinking?: string;
+};
+
+const REASONING_MODEL_PATTERN = /(deepseek|reason|think|r1|o1)/i;
+const THINKING_TAGS = [
+  /<think>([\s\S]*?)<\/think>/gi,
+  /<thinking>([\s\S]*?)<\/thinking>/gi,
+];
+
+function isReasoningModel(model: string) {
+  return REASONING_MODEL_PATTERN.test(model);
+}
+
+function extractThinking(content: string) {
+  let cleaned = content;
+  const thinkingParts: string[] = [];
+
+  THINKING_TAGS.forEach((pattern) => {
+    cleaned = cleaned.replace(pattern, (_match, inner) => {
+      if (typeof inner === "string") {
+        const trimmed = inner.trim();
+        if (trimmed) thinkingParts.push(trimmed);
+      }
+      return "";
+    });
+  });
+
+  return {
+    content: cleaned.trim(),
+    thinking: thinkingParts.length ? thinkingParts.join("\n\n").trim() : undefined,
+  };
+}
+
 export function useOllamaChat(model: string, options?: ToolOptions) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +105,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       if (requestId !== requestIdRef.current) return;
 
       const payload = response as { message?: Message };
-      const assistantMessage = payload?.message;
+      const assistantMessage = payload?.message as
+        | (Message & { reasoning?: string; thinking?: string; thoughts?: string })
+        | undefined;
       if (!assistantMessage) throw new Error("Invalid response from Ollama.");
       const toolCalls = assistantMessage?.tool_calls ?? [];
 
@@ -82,10 +118,27 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
         return;
       }
 
-      const content = assistantMessage?.content ?? "";
-      if (!content.trim()) throw new Error("No response from Ollama.");
-      appendHistory([{ role: "assistant", content }]);
-      setMessages((prev) => [...prev, { role: "assistant", content }]);
+      const responseContent = assistantMessage?.content ?? "";
+      const reasoningEnabled = isReasoningModel(model);
+      const responseThinking =
+        assistantMessage?.reasoning ??
+        assistantMessage?.thinking ??
+        assistantMessage?.thoughts;
+      const extracted = reasoningEnabled
+        ? extractThinking(responseContent)
+        : { content: responseContent.trim(), thinking: undefined };
+      const thinking =
+        reasoningEnabled && typeof responseThinking === "string"
+          ? responseThinking.trim() || extracted.thinking
+          : extracted.thinking;
+      const content = extracted.content;
+      const assistantHistoryMessage = { role: "assistant", content };
+      if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
+      appendHistory([assistantHistoryMessage]);
+      setMessages((prev) => [
+        ...prev,
+        { ...assistantHistoryMessage, thinking },
+      ]);
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Ollama unreachable.");
@@ -206,7 +259,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     });
 
     const payload = response as { message?: Message };
-    const assistantMessage = payload?.message;
+    const assistantMessage = payload?.message as
+      | (Message & { reasoning?: string; thinking?: string; thoughts?: string })
+      | undefined;
     if (!assistantMessage) throw new Error("Invalid response from Ollama.");
     const toolCallsFollowup = assistantMessage?.tool_calls ?? [];
     if (toolCallsFollowup.length > 0) {
@@ -214,9 +269,26 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       return;
     }
 
-    const content = assistantMessage?.content ?? "";
-    if (!content.trim()) throw new Error("No response from Ollama.");
-    appendHistory([{ role: "assistant", content }]);
-    setMessages((prev) => [...prev, { role: "assistant", content }]);
+    const responseContent = assistantMessage?.content ?? "";
+    const reasoningEnabled = isReasoningModel(model);
+    const responseThinking =
+      assistantMessage?.reasoning ??
+      assistantMessage?.thinking ??
+      assistantMessage?.thoughts;
+    const extracted = reasoningEnabled
+      ? extractThinking(responseContent)
+      : { content: responseContent.trim(), thinking: undefined };
+    const thinking =
+      reasoningEnabled && typeof responseThinking === "string"
+        ? responseThinking.trim() || extracted.thinking
+        : extracted.thinking;
+    const content = extracted.content;
+    const assistantHistoryMessage = { role: "assistant", content };
+    if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
+    appendHistory([assistantHistoryMessage]);
+    setMessages((prev) => [
+      ...prev,
+      { ...assistantHistoryMessage, thinking },
+    ]);
   }
 }

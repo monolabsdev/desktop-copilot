@@ -116,7 +116,7 @@ export function Overlay() {
             </div>
 
             {/* Messages */}
-            <MessageList messages={messages} />
+            <MessageList messages={messages} isSending={isSending} />
 
             {/* Error */}
             {error && (
