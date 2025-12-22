@@ -1,8 +1,7 @@
 import { Button } from "@heroui/react";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
@@ -11,6 +10,7 @@ import { useOverlayHotkeys } from "./hooks/useOverlayHotkeys";
 import { DEFAULT_MODEL } from "./constants";
 import { CaptureConsentModal } from "./components/CaptureConsentModal";
 import { OllamaRequiredModal } from "./components/OllamaRequiredModal";
+import { useOllamaHealth } from "./hooks/useOllamaHealth";
 
 export function Overlay() {
   useOverlayHotkeys();
@@ -19,11 +19,11 @@ export function Overlay() {
   const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
-  const [ollamaModalOpen, setOllamaModalOpen] = useState(false);
-  const [ollamaError, setOllamaError] = useState<string | null>(null);
   const consentResolver = useRef<
     ((value: { approved: boolean }) => void) | null
   >(null);
+  const { isOpen, error: ollamaError, handleDownload, handleRetry } =
+    useOllamaHealth();
 
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
@@ -33,27 +33,6 @@ export function Overlay() {
       inputRef.current?.select();
     }).then((handler) => {
       unlisten = handler;
-    });
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
-  useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-
-    listen<{ ok: boolean; error?: string }>("ollama:health", (event) => {
-      if (event.payload?.ok) return;
-      setOllamaError(event.payload?.error ?? "Ollama unreachable.");
-      setOllamaModalOpen(true);
-    }).then((handler) => {
-      unlisten = handler;
-    });
-
-    invoke("ollama_health_check").catch((err) => {
-      setOllamaError(err instanceof Error ? err.message : "Ollama unreachable.");
-      setOllamaModalOpen(true);
     });
 
     return () => {
@@ -88,21 +67,6 @@ export function Overlay() {
     consentResolver.current = null;
   }, []);
 
-  const handleOllamaDownload = useCallback(async () => {
-    await openUrl("https://ollama.com/download");
-  }, []);
-
-  const handleOllamaRetry = useCallback(async () => {
-    try {
-      await invoke("ollama_health_check");
-      setOllamaError(null);
-      setOllamaModalOpen(false);
-    } catch (err) {
-      setOllamaError(err instanceof Error ? err.message : "Ollama unreachable.");
-      setOllamaModalOpen(true);
-    }
-  }, []);
-
   const {
     messages,
     input,
@@ -117,6 +81,7 @@ export function Overlay() {
     requestScreenCapture: requestCaptureConsent,
     setCaptureInProgress: setIsCapturing,
     beforeCapture: async () => {
+      // Hide the overlay so the OCR doesn't capture itself.
       const window = getCurrentWindow();
       await new Promise((resolve) => setTimeout(resolve, 150));
       await window.hide();
@@ -176,10 +141,10 @@ export function Overlay() {
         onCancel={handleCancel}
       />
       <OllamaRequiredModal
-        isOpen={ollamaModalOpen}
+        isOpen={isOpen}
         error={ollamaError}
-        onDownload={handleOllamaDownload}
-        onRetry={handleOllamaRetry}
+        onDownload={handleDownload}
+        onRetry={handleRetry}
       />
     </>
   );

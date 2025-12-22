@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
 import { CAPTURE_SCREEN_TEXT_TOOL } from "../tools/captureScreenText";
+import { ollamaChat } from "../ollama/client";
 
 type CaptureConsent = {
   approved: boolean;
@@ -55,18 +56,17 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     setMessages((prev) => [...prev, userMessage]);
     appendHistory([userMessage]);
 
+    // Bump request id to ignore late responses after cancel/replace.
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
 
     try {
       const baseMessages = historyRef.current;
-      const request: Record<string, unknown> = {
+      const response = await ollamaChat({
         model,
         messages: baseMessages,
-        stream: false,
-      };
-      if (toolConfig) request.tools = toolConfig;
-      const response = await invoke<unknown>("ollama_chat", { request });
+        tools: toolConfig,
+      });
 
       if (requestId !== requestIdRef.current) return;
 
@@ -76,6 +76,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       const toolCalls = assistantMessage?.tool_calls ?? [];
 
       if (toolCalls.length > 0) {
+        // Tool calls are executed locally, then we send a follow-up chat.
         const toolReply = await handleToolCalls(toolCalls, baseMessages);
         if (!toolReply) return;
         return;
@@ -122,10 +123,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     toolCalls: NonNullable<Message["tool_calls"]>,
     baseMessages: Message[],
   ) {
-    const captureCall = toolCalls.find(
-      (call) => call.function?.name === "capture_screen_text",
-    );
-    if (!captureCall) {
+    if (!toolCalls.some((call) => call.function?.name === "capture_screen_text")) {
       throw new Error("Unsupported tool call.");
     }
 
@@ -201,13 +199,11 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       toolMessage,
     ];
 
-    const request: Record<string, unknown> = {
+    const response = await ollamaChat({
       model,
       messages: followupMessages,
-      stream: false,
-    };
-    if (toolConfig) request.tools = toolConfig;
-    const response = await invoke<unknown>("ollama_chat", { request });
+      tools: toolConfig,
+    });
 
     const payload = response as { message?: Message };
     const assistantMessage = payload?.message;

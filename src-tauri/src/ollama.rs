@@ -3,6 +3,7 @@ use serde_json::Value;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+// Keep this local-only; the frontend never calls Ollama directly.
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -19,6 +20,7 @@ fn build_client() -> Result<reqwest::Client, String> {
 }
 
 fn describe_reqwest_error(err: &reqwest::Error) -> String {
+    // Normalize common failure modes for the UI.
     if err.is_timeout() {
         return "timeout while connecting to Ollama".to_string();
     }

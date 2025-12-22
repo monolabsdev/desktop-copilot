@@ -23,6 +23,7 @@ fn main() {
                 let state = app.state::<overlay::OverlayState>();
                 overlay::snap_overlay_to_corner(window, state.current_corner());
             }
+            // Run a background health check so the UI can prompt if Ollama is missing.
             tauri::async_runtime::spawn(ollama::emit_health_if_needed(app.handle().clone()));
             Ok(())
         })
