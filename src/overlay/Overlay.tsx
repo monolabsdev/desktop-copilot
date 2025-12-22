@@ -12,6 +12,12 @@ import { CaptureConsentModal } from "./components/CaptureConsentModal";
 import { OllamaRequiredModal } from "./components/OllamaRequiredModal";
 import { useOllamaHealth } from "./hooks/useOllamaHealth";
 
+type OverlayConfig = {
+  tools: {
+    capture_screen_text_enabled: boolean;
+  };
+};
+
 export function Overlay() {
   useOverlayHotkeys();
 
@@ -31,6 +37,19 @@ export function Overlay() {
     listen("overlay:shown", () => {
       inputRef.current?.focus();
       inputRef.current?.select();
+    }).then((handler) => {
+      unlisten = handler;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+    listen<OverlayConfig>("config:updated", (event) => {
+      setCaptureToolEnabled(event.payload.tools.capture_screen_text_enabled);
     }).then((handler) => {
       unlisten = handler;
     });

@@ -10,6 +10,7 @@ use tauri::Manager;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
+    WebviewUrl, WebviewWindowBuilder,
 };
 
 fn main() {
@@ -30,14 +31,36 @@ fn main() {
             // Run a background health check so the UI can prompt if Ollama is missing.
             tauri::async_runtime::spawn(ollama::emit_health_if_needed(app.handle().clone()));
 
-            // create a tray icon, menu, menuitems  and menu events
+            // create a tray icon.
+            let preferences_i =
+                MenuItem::with_id(app, "preferences", "Preferences", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&quit_i])?;
+            let menu = Menu::with_items(app, &[&preferences_i, &quit_i])?;
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
+                    // opens preferences
+                    "preferences" => {
+                        if let Some(window) = app.webview_windows().get("preferences") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            return;
+                        }
+
+                        let _ = WebviewWindowBuilder::new(
+                            app,
+                            "preferences",
+                            WebviewUrl::App("index.html?view=preferences".into()),
+                        )
+                        .title("Preferences")
+                        .inner_size(420.0, 520.0)
+                        .resizable(false)
+                        .transparent(true)
+                        .decorations(true)
+                        .build();
+                    }
                     // adds the event for the quit menu uitem
                     "quit" => app.exit(0),
                     _ => {}
@@ -52,6 +75,8 @@ fn main() {
             overlay::get_overlay_corner,
             config::get_capture_tool_enabled,
             config::set_capture_tool_enabled,
+            config::get_overlay_config,
+            config::set_overlay_config,
             capture::capture_screen_text,
             ollama::ollama_health_check,
             ollama::ollama_chat

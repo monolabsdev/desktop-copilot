@@ -1,8 +1,11 @@
-use crate::overlay::OverlayCorner;
+use crate::{
+    overlay::{snap_overlay_to_corner, OverlayCorner, OverlayState},
+    shortcuts,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 const CONFIG_FILE: &str = "config.json";
 
@@ -112,4 +115,25 @@ pub fn get_capture_tool_enabled(app: AppHandle) -> bool {
 #[tauri::command]
 pub fn set_capture_tool_enabled(app: AppHandle, enabled: bool) {
     set_capture_tool_enabled_value(&app, enabled);
+}
+
+#[tauri::command]
+pub fn get_overlay_config(app: AppHandle) -> OverlayConfig {
+    load_overlay_config(&app)
+}
+
+#[tauri::command]
+pub fn set_overlay_config(
+    app: AppHandle,
+    state: State<OverlayState>,
+    config: OverlayConfig,
+) -> Result<(), String> {
+    save_overlay_config(&app, &config);
+    state.set_corner(config.corner);
+    if let Some(window) = app.webview_windows().get("overlay") {
+        snap_overlay_to_corner(window, config.corner);
+    }
+    shortcuts::register_overlay_shortcut(&app, &config);
+    let _ = app.emit("config:updated", config.clone());
+    Ok(())
 }
