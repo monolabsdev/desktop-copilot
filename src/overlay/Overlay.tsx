@@ -2,10 +2,23 @@ import { Button } from "@heroui/react";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
+import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 
 const DEFAULT_MODEL = "gpt-oss:20b-cloud";
 
 export function Overlay() {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        invoke("toggle_overlay");
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const {
     messages,
     input,
@@ -15,9 +28,8 @@ export function Overlay() {
     sendMessage,
     clearHistory,
   } = useOllamaChat(DEFAULT_MODEL);
-
   return (
-    <div className="overlay-root fixed inset-0 pointer-events-none">
+    <div className="overlay-root fixed inset-0 pointer-events-none backdrop-blur-2xl">
       <div className="absolute inset-0 flex justify-center">
         <div className="w-full max-w-2xl h-full flex flex-col pointer-events-auto">
           {/* Header */}
