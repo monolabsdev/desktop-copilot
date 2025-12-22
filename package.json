@@ -16,8 +16,10 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "ollama": "^0.6.3",
+    "react-markdown": "^9.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "remark-gfm": "^4.0.0",
     "tailwindcss": "^4.1.18"
   },
   "devDependencies": {

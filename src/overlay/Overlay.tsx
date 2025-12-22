@@ -1,22 +1,30 @@
 import { Button } from "@heroui/react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { useEffect, useRef } from "react";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
-import { useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-
-const DEFAULT_MODEL = "gpt-oss:20b-cloud";
+import { useOverlayHotkeys } from "./hooks/useOverlayHotkeys";
+import { DEFAULT_MODEL } from "./constants";
 
 export function Overlay() {
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        invoke("toggle_overlay");
-      }
-    };
+  useOverlayHotkeys();
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+
+    listen("overlay:shown", () => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }).then((handler) => {
+      unlisten = handler;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   const {
@@ -26,6 +34,7 @@ export function Overlay() {
     isSending,
     error,
     sendMessage,
+    cancelSend,
     clearHistory,
   } = useOllamaChat(DEFAULT_MODEL);
   return (
@@ -45,7 +54,7 @@ export function Overlay() {
           </div>
 
           {/* Messages */}
-          <MessageList messages={messages} model={DEFAULT_MODEL} />
+          <MessageList messages={messages} />
 
           {/* Error */}
           {error && (
@@ -58,6 +67,8 @@ export function Overlay() {
             setInput={setInput}
             isSending={isSending}
             onSend={sendMessage}
+            onCancel={cancelSend}
+            inputRef={inputRef}
           />
         </div>
       </div>

@@ -1,16 +1,34 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import ollama from "ollama/browser";
 import type { Message } from "ollama";
+import { handleChatCommand } from "../commands";
 
 export function useOllamaChat(model: string) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<{ abort: () => void } | null>(null);
 
   const sendMessage = async () => {
     const trimmed = input.trim();
     if (!trimmed || isSending) return;
+
+    const commandResult = await handleChatCommand(trimmed, { invoke });
+    if (commandResult.handled) {
+      if (commandResult.error) {
+        setError(commandResult.error);
+        return;
+      }
+      if (commandResult.clearInput) setInput("");
+      const newMessages = commandResult.messages;
+      if (newMessages && newMessages.length) {
+        setMessages((prev) => [...prev, ...newMessages]);
+      }
+      setError(null);
+      return;
+    }
 
     const nextMessages: Message[] = [
       ...messages,
@@ -28,6 +46,7 @@ export function useOllamaChat(model: string) {
         messages: nextMessages,
         stream: true,
       });
+      abortRef.current = response;
 
       let streamed = "";
       for await (const part of response) {
@@ -50,6 +69,10 @@ export function useOllamaChat(model: string) {
 
       if (!streamed.trim()) throw new Error("No response from Ollama.");
     } catch (err) {
+      if (!abortRef.current) {
+        setError(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Ollama unreachable.");
       setMessages((prev) => {
         if (prev.length === 0) return prev;
@@ -61,8 +84,17 @@ export function useOllamaChat(model: string) {
         return next;
       });
     } finally {
+      abortRef.current = null;
       setIsSending(false);
     }
+  };
+
+  const cancelSend = () => {
+    if (!isSending) return;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsSending(false);
+    setError(null);
   };
 
   const clearHistory = () => {
@@ -76,6 +108,7 @@ export function useOllamaChat(model: string) {
     isSending,
     error,
     sendMessage,
+    cancelSend,
     clearHistory,
   };
 }

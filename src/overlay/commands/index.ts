@@ -1,0 +1,1 @@
+export { handleChatCommand } from "./handleChatCommand";
