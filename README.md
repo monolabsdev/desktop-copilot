@@ -4,9 +4,9 @@ An always-on-top AI overlay for your desktop. The UI is React/Vite, the backend
 is Tauri (Rust), and all AI requests are routed through the backend to a local
 Ollama server.
 
-Important: Ollama is not bundled. You must install and run it yourself.
+**Important: Ollama is not bundled. You must install and run it yourself.**
 
-Supported Operating Systems:
+**Supported Operating Systems:**
 - [x] Windows
 - [ ] MacOS
 - [ ] Linux
