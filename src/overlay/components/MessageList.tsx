@@ -1,4 +1,3 @@
-import { ScrollShadow } from "@heroui/react";
 import { useEffect, useRef } from "react";
 import type { Message } from "ollama";
 import { MessageBubble } from "./MessageBubble";
@@ -11,16 +10,13 @@ export function MessageList({ messages }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, [messages]);
 
   return (
-    <ScrollShadow hideScrollBar className="flex-1 px-4 py-6 space-y-4">
+    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
       {messages.length === 0 ? (
-        <div className="text-sm text-white/40">
-          {/* removed for now. */}
-          {/*Overlay active. Ollama at localhost:11434.*/}
-        </div>
+        <div className="text-xs text-white/40">Overlay active.</div>
       ) : (
         messages.map((message, index) => (
           <MessageBubble
@@ -30,6 +26,6 @@ export function MessageList({ messages }: Props) {
         ))
       )}
       <div ref={endRef} />
-    </ScrollShadow>
+    </div>
   );
 }

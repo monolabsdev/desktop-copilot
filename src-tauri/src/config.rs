@@ -12,6 +12,24 @@ pub struct KeybindConfig {
     pub focus_overlay: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolConfig {
+    #[serde(default = "default_capture_tool_enabled")]
+    pub capture_screen_text_enabled: bool,
+}
+
+fn default_capture_tool_enabled() -> bool {
+    true
+}
+
+impl Default for ToolConfig {
+    fn default() -> Self {
+        Self {
+            capture_screen_text_enabled: true,
+        }
+    }
+}
+
 impl Default for KeybindConfig {
     fn default() -> Self {
         Self {
@@ -26,6 +44,8 @@ pub struct OverlayConfig {
     pub corner: OverlayCorner,
     #[serde(default)]
     pub keybinds: KeybindConfig,
+    #[serde(default)]
+    pub tools: ToolConfig,
 }
 
 impl Default for OverlayConfig {
@@ -33,6 +53,7 @@ impl Default for OverlayConfig {
         Self {
             corner: OverlayCorner::TopRight,
             keybinds: KeybindConfig::default(),
+            tools: ToolConfig::default(),
         }
     }
 }
@@ -71,4 +92,24 @@ pub fn save_overlay_config(app: &AppHandle, config: &OverlayConfig) {
     if let Ok(payload) = serde_json::to_string_pretty(config) {
         let _ = fs::write(path, payload);
     }
+}
+
+pub fn capture_tool_enabled(app: &AppHandle) -> bool {
+    load_overlay_config(app).tools.capture_screen_text_enabled
+}
+
+pub fn set_capture_tool_enabled_value(app: &AppHandle, enabled: bool) {
+    let mut config = load_overlay_config(app);
+    config.tools.capture_screen_text_enabled = enabled;
+    save_overlay_config(app, &config);
+}
+
+#[tauri::command]
+pub fn get_capture_tool_enabled(app: AppHandle) -> bool {
+    capture_tool_enabled(&app)
+}
+
+#[tauri::command]
+pub fn set_capture_tool_enabled(app: AppHandle, enabled: bool) {
+    set_capture_tool_enabled_value(&app, enabled);
 }

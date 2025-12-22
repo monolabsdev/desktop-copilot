@@ -1,9 +1,10 @@
-// Prevents additional console window on Windows in release
+// Prevents additional console window on Windows in release DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod capture;
+mod config;
 mod overlay;
 mod shortcuts;
-mod config;
 use tauri::Manager;
 
 fn main() {
@@ -15,7 +16,6 @@ fn main() {
             app.manage(overlay::OverlayState::new(config.corner));
             config::save_overlay_config(&handle, &config);
 
-
             shortcuts::register_overlay_shortcut(&handle, &config);
             if let Some(window) = app.webview_windows().get("overlay") {
                 let state = app.state::<overlay::OverlayState>();
@@ -26,9 +26,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             overlay::toggle_overlay,
             overlay::set_overlay_corner,
-            overlay::get_overlay_corner
+            overlay::get_overlay_corner,
+            config::get_capture_tool_enabled,
+            config::set_capture_tool_enabled,
+            capture::capture_screen_text
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

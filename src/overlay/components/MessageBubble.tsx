@@ -7,45 +7,41 @@ interface Props {
 }
 export function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
+  const label = isUser ? "You" : "AI";
 
   return (
-    <div className={isUser ? "flex justify-end" : "flex justify-start"}>
-      <div className="max-w-[85%] space-y-1">
-        <div
-          className={
-            isUser
-              ? "rounded-md bg-white/15 text-white px-3 py-2 text-sm"
-              : "rounded-md bg-black/40 text-white px-3 py-2 text-sm"
-          }
+    <div className="space-y-1">
+      <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+        {label}
+      </div>
+      <div className="text-sm text-white/90 leading-relaxed">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ children, ...props }) => (
+              <a
+                {...props}
+                className="underline text-white/70"
+                rel="noreferrer"
+                target="_blank"
+              >
+                {children}
+              </a>
+            ),
+            code: ({ children, className }) => (
+              <code className={`rounded bg-white/10 px-1 ${className ?? ""}`}>
+                {children}
+              </code>
+            ),
+            pre: ({ children }) => (
+              <pre className="overflow-x-auto rounded bg-white/10 p-3">
+                {children}
+              </pre>
+            ),
+          }}
         >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              a: ({ children, ...props }) => (
-                <a
-                  {...props}
-                  className="underline text-sky-200"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {children}
-                </a>
-              ),
-              code: ({ children, className }) => (
-                <code className={`rounded bg-black/40 px-1 ${className ?? ""}`}>
-                  {children}
-                </code>
-              ),
-              pre: ({ children }) => (
-                <pre className="overflow-x-auto rounded bg-black/50 p-3">
-                  {children}
-                </pre>
-              ),
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
-        </div>
+          {message.content}
+        </ReactMarkdown>
       </div>
     </div>
   );

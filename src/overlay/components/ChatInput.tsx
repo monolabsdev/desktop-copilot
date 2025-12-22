@@ -59,7 +59,7 @@ export function ChatInput({
             onSend();
           }
         }}
-        className="flex-1 rounded-md"
+        className="overlay-input flex-1"
       />
 
       <Button
@@ -67,7 +67,7 @@ export function ChatInput({
         aria-label={isSending ? "Cancel response" : "Send message"}
         isDisabled={!isSending && !input.trim()}
         onPress={isSending ? onCancel : onSend}
-        className="h-10 w-10 min-w-10 rounded-md"
+        className="h-10 w-10 min-w-10 rounded-md bg-white/10 text-white/80"
       >
         {isSending ? <StopIcon /> : <SendIcon />}
       </Button>
