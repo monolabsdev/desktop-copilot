@@ -14,7 +14,7 @@ export async function handleChatCommand(
   if (!handler) {
     return {
       handled: true,
-      error: "Unknown command. Try /corner top-left.",
+      error: "Unknown command.",
     };
   }
 
