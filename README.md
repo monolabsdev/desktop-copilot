@@ -7,9 +7,9 @@ Ollama server.
 Important: Ollama is not bundled. You must install and run it yourself.
 
 Supported Operating Systems:
-[x] Windows
-[ ] MacOS
-[ ] Linux
+- [x] Windows
+- [ ] MacOS
+- [ ] Linux
 
 ## Quick start
 
