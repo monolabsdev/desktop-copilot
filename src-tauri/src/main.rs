@@ -7,6 +7,10 @@ mod ollama;
 mod overlay;
 mod shortcuts;
 use tauri::Manager;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::TrayIconBuilder,
+};
 
 fn main() {
     tauri::Builder::default()
@@ -25,6 +29,21 @@ fn main() {
             }
             // Run a background health check so the UI can prompt if Ollama is missing.
             tauri::async_runtime::spawn(ollama::emit_health_if_needed(app.handle().clone()));
+
+            // create a tray icon, menu, menuitems  and menu events
+            let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&quit_i])?;
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(true)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    // adds the event for the quit menu uitem
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .build(app)?;
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
