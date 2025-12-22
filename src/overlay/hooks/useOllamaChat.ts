@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import ollama from "ollama/browser";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
 import { CAPTURE_SCREEN_TEXT_TOOL } from "../tools/captureScreenText";
@@ -22,7 +21,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<{ abort: () => void } | null>(null);
+  const requestIdRef = useRef(0);
   const historyRef = useRef<Message[]>([]);
   const toolConfig = options?.toolsEnabled ? [CAPTURE_SCREEN_TEXT_TOOL] : undefined;
 
@@ -56,78 +55,49 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     setMessages((prev) => [...prev, userMessage]);
     appendHistory([userMessage]);
 
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+
     try {
       const baseMessages = historyRef.current;
-      const firstResponse = await ollama.chat({
+      const request: Record<string, unknown> = {
         model,
         messages: baseMessages,
-        stream: true,
-        tools: toolConfig,
-      });
-      abortRef.current = firstResponse;
+        stream: false,
+      };
+      if (toolConfig) request.tools = toolConfig;
+      const response = await invoke<unknown>("ollama_chat", { request });
 
-      let streamed = "";
-      let toolCalls: Message["tool_calls"] = [];
-      let assistantAdded = false;
+      if (requestId !== requestIdRef.current) return;
 
-      for await (const part of firstResponse) {
-        const newToolCalls = part?.message?.tool_calls;
-        if (newToolCalls?.length) {
-          toolCalls = newToolCalls;
-        }
+      const payload = response as { message?: Message };
+      const assistantMessage = payload?.message;
+      if (!assistantMessage) throw new Error("Invalid response from Ollama.");
+      const toolCalls = assistantMessage?.tool_calls ?? [];
 
-        const chunk = part?.message?.content ?? "";
-        if (!chunk) continue;
-        streamed += chunk;
-        setMessages((prev) => {
-          const next = [...prev];
-          const lastIndex = next.length - 1;
-          const last = next[lastIndex];
-          if (!assistantAdded || last?.role !== "assistant") {
-            next.push({ role: "assistant", content: streamed });
-            assistantAdded = true;
-          } else {
-            next[lastIndex] = { ...last, content: streamed };
-          }
-          return next;
-        });
-      }
-
-      if (toolCalls && toolCalls.length > 0) {
-        if (assistantAdded) {
-          setMessages((prev) => {
-            if (prev.length === 0) return prev;
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last.role === "assistant") {
-              next.pop();
-            }
-            return next;
-          });
-        }
+      if (toolCalls.length > 0) {
         const toolReply = await handleToolCalls(toolCalls, baseMessages);
         if (!toolReply) return;
         return;
       }
 
-      if (!streamed.trim()) throw new Error("No response from Ollama.");
-      appendHistory([{ role: "assistant", content: streamed }]);
+      const content = assistantMessage?.content ?? "";
+      if (!content.trim()) throw new Error("No response from Ollama.");
+      appendHistory([{ role: "assistant", content }]);
+      setMessages((prev) => [...prev, { role: "assistant", content }]);
     } catch (err) {
-      if (!abortRef.current) {
-        setError(null);
-        return;
-      }
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Ollama unreachable.");
     } finally {
-      abortRef.current = null;
-      setIsSending(false);
+      if (requestId === requestIdRef.current) {
+        setIsSending(false);
+      }
     }
   };
 
   const cancelSend = () => {
     if (!isSending) return;
-    abortRef.current?.abort();
-    abortRef.current = null;
+    requestIdRef.current += 1;
     setIsSending(false);
     setError(null);
   };
@@ -231,35 +201,26 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       toolMessage,
     ];
 
-    const response = await ollama.chat({
+    const request: Record<string, unknown> = {
       model,
       messages: followupMessages,
-      stream: true,
-      tools: toolConfig,
-    });
-    abortRef.current = response;
+      stream: false,
+    };
+    if (toolConfig) request.tools = toolConfig;
+    const response = await invoke<unknown>("ollama_chat", { request });
 
-    let streamed = "";
-    let assistantAdded = false;
-    for await (const part of response) {
-      const chunk = part?.message?.content ?? "";
-      if (!chunk) continue;
-      streamed += chunk;
-      setMessages((prev) => {
-        const next = [...prev];
-        const lastIndex = next.length - 1;
-        const last = next[lastIndex];
-        if (!assistantAdded || last?.role !== "assistant") {
-          next.push({ role: "assistant", content: streamed });
-          assistantAdded = true;
-        } else {
-          next[lastIndex] = { ...last, content: streamed };
-        }
-        return next;
-      });
+    const payload = response as { message?: Message };
+    const assistantMessage = payload?.message;
+    if (!assistantMessage) throw new Error("Invalid response from Ollama.");
+    const toolCallsFollowup = assistantMessage?.tool_calls ?? [];
+    if (toolCallsFollowup.length > 0) {
+      await handleToolCalls(toolCallsFollowup, followupMessages);
+      return;
     }
 
-    if (!streamed.trim()) throw new Error("No response from Ollama.");
-    appendHistory([{ role: "assistant", content: streamed }]);
+    const content = assistantMessage?.content ?? "";
+    if (!content.trim()) throw new Error("No response from Ollama.");
+    appendHistory([{ role: "assistant", content }]);
+    setMessages((prev) => [...prev, { role: "assistant", content }]);
   }
 }

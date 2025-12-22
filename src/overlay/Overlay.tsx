@@ -2,6 +2,7 @@ import { Button } from "@heroui/react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
@@ -9,6 +10,7 @@ import { useOllamaChat } from "./hooks/useOllamaChat";
 import { useOverlayHotkeys } from "./hooks/useOverlayHotkeys";
 import { DEFAULT_MODEL } from "./constants";
 import { CaptureConsentModal } from "./components/CaptureConsentModal";
+import { OllamaRequiredModal } from "./components/OllamaRequiredModal";
 
 export function Overlay() {
   useOverlayHotkeys();
@@ -17,6 +19,8 @@ export function Overlay() {
   const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
+  const [ollamaModalOpen, setOllamaModalOpen] = useState(false);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
   const consentResolver = useRef<
     ((value: { approved: boolean }) => void) | null
   >(null);
@@ -29,6 +33,27 @@ export function Overlay() {
       inputRef.current?.select();
     }).then((handler) => {
       unlisten = handler;
+    });
+
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | null = null;
+
+    listen<{ ok: boolean; error?: string }>("ollama:health", (event) => {
+      if (event.payload?.ok) return;
+      setOllamaError(event.payload?.error ?? "Ollama unreachable.");
+      setOllamaModalOpen(true);
+    }).then((handler) => {
+      unlisten = handler;
+    });
+
+    invoke("ollama_health_check").catch((err) => {
+      setOllamaError(err instanceof Error ? err.message : "Ollama unreachable.");
+      setOllamaModalOpen(true);
     });
 
     return () => {
@@ -61,6 +86,21 @@ export function Overlay() {
     setConsentOpen(false);
     consentResolver.current?.({ approved: false });
     consentResolver.current = null;
+  }, []);
+
+  const handleOllamaDownload = useCallback(async () => {
+    await openUrl("https://ollama.com/download");
+  }, []);
+
+  const handleOllamaRetry = useCallback(async () => {
+    try {
+      await invoke("ollama_health_check");
+      setOllamaError(null);
+      setOllamaModalOpen(false);
+    } catch (err) {
+      setOllamaError(err instanceof Error ? err.message : "Ollama unreachable.");
+      setOllamaModalOpen(true);
+    }
   }, []);
 
   const {
@@ -134,6 +174,12 @@ export function Overlay() {
         isOpen={consentOpen}
         onApprove={handleApprove}
         onCancel={handleCancel}
+      />
+      <OllamaRequiredModal
+        isOpen={ollamaModalOpen}
+        error={ollamaError}
+        onDownload={handleOllamaDownload}
+        onRetry={handleOllamaRetry}
       />
     </>
   );
