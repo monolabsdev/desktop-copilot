@@ -21,8 +21,18 @@ pub struct ToolConfig {
     pub capture_screen_text_enabled: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppearanceConfig {
+    #[serde(default = "default_panel_opacity")]
+    pub panel_opacity: f32,
+}
+
 fn default_capture_tool_enabled() -> bool {
     true
+}
+
+fn default_panel_opacity() -> f32 {
+    0.85
 }
 
 impl Default for ToolConfig {
@@ -42,11 +52,21 @@ impl Default for KeybindConfig {
     }
 }
 
+impl Default for AppearanceConfig {
+    fn default() -> Self {
+        Self {
+            panel_opacity: default_panel_opacity(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OverlayConfig {
     pub corner: OverlayCorner,
     #[serde(default)]
     pub keybinds: KeybindConfig,
+    #[serde(default)]
+    pub appearance: AppearanceConfig,
     #[serde(default)]
     pub tools: ToolConfig,
 }
@@ -56,6 +76,7 @@ impl Default for OverlayConfig {
         Self {
             corner: OverlayCorner::TopRight,
             keybinds: KeybindConfig::default(),
+            appearance: AppearanceConfig::default(),
             tools: ToolConfig::default(),
         }
     }

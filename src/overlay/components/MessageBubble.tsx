@@ -6,34 +6,36 @@ import type { Message } from "ollama";
 interface Props {
   message: Message & { thinking?: string };
 }
+
+const markdownComponents = {
+  a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
+    <a
+      {...props}
+      className="underline text-white/70"
+      rel="noreferrer"
+      target="_blank"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children, className }: ComponentPropsWithoutRef<"code">) => (
+    <code className={`rounded bg-white/10 px-1 ${className ?? ""}`}>
+      {children}
+    </code>
+  ),
+  pre: ({ children }: ComponentPropsWithoutRef<"pre">) => (
+    <pre className="overflow-x-auto rounded bg-white/10 p-3">
+      {children}
+    </pre>
+  ),
+};
+
 export function MessageBubble({ message }: Props) {
   const isUser = message.role === "user";
   const label = isUser ? "You" : "AI";
   const thinking = !isUser ? message.thinking?.trim() : undefined;
   const content = message.content?.trim() ?? "";
   const showContent = isUser || content.length > 0;
-  const markdownComponents = {
-    a: ({ children, ...props }: ComponentPropsWithoutRef<"a">) => (
-      <a
-        {...props}
-        className="underline text-white/70"
-        rel="noreferrer"
-        target="_blank"
-      >
-        {children}
-      </a>
-    ),
-    code: ({ children, className }: ComponentPropsWithoutRef<"code">) => (
-      <code className={`rounded bg-white/10 px-1 ${className ?? ""}`}>
-        {children}
-      </code>
-    ),
-    pre: ({ children }: ComponentPropsWithoutRef<"pre">) => (
-      <pre className="overflow-x-auto rounded bg-white/10 p-3">
-        {children}
-      </pre>
-    ),
-  };
 
   return (
     <div className="space-y-2">

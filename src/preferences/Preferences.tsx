@@ -1,36 +1,53 @@
 import { Button, Input, Label, Switch } from "@heroui/react";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  DEFAULT_OVERLAY_CONFIG,
+  OVERLAY_CORNERS,
+  type OverlayConfig,
+  type OverlayCorner,
+} from "../shared/config";
 
-type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+function SectionTitle({ children }: { children: string }) {
+  return (
+    <div className="text-xs uppercase tracking-[0.2em] text-white/40">
+      {children}
+    </div>
+  );
+}
 
-type OverlayConfig = {
-  corner: OverlayCorner;
-  keybinds: {
-    toggle_overlay: string;
-    focus_overlay: string;
-  };
-  tools: {
-    capture_screen_text_enabled: boolean;
-  };
-};
-
-const DEFAULT_CONFIG: OverlayConfig = {
-  corner: "top-right",
-  keybinds: {
-    toggle_overlay: "Ctrl+Space",
-    focus_overlay: "Ctrl+Shift+Space",
-  },
-  tools: {
-    capture_screen_text_enabled: true,
-  },
-};
+function FieldLabel({ children }: { children: string }) {
+  return <div className="text-xs text-white/60">{children}</div>;
+}
 
 export function Preferences() {
-  const [config, setConfig] = useState<OverlayConfig>(DEFAULT_CONFIG);
+  const [config, setConfig] = useState<OverlayConfig>(DEFAULT_OVERLAY_CONFIG);
+  const [initialConfig, setInitialConfig] = useState<OverlayConfig>(
+    DEFAULT_OVERLAY_CONFIG,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const statusTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const clamped = Math.min(
+      1,
+      Math.max(0.6, config.appearance.panel_opacity),
+    );
+    document.documentElement.style.setProperty(
+      "--overlay-panel-opacity",
+      clamped.toString(),
+    );
+  }, [config.appearance.panel_opacity]);
+
+  useEffect(() => {
+    return () => {
+      if (statusTimeoutRef.current) {
+        window.clearTimeout(statusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -38,11 +55,13 @@ export function Preferences() {
       .then((loaded) => {
         if (active) {
           setConfig(loaded);
+          setInitialConfig(loaded);
         }
       })
       .catch(() => {
         if (active) {
-          setConfig(DEFAULT_CONFIG);
+          setConfig(DEFAULT_OVERLAY_CONFIG);
+          setInitialConfig(DEFAULT_OVERLAY_CONFIG);
         }
       })
       .finally(() => {
@@ -61,31 +80,46 @@ export function Preferences() {
       ...prev,
       keybinds: { ...prev.keybinds, [key]: value },
     }));
+  const setPanelOpacity = (value: number) =>
+    setConfig((prev) => ({
+      ...prev,
+      appearance: { ...prev.appearance, panel_opacity: value },
+    }));
   const setCaptureEnabled = (enabled: boolean) =>
     setConfig((prev) => ({
       ...prev,
       tools: { ...prev.tools, capture_screen_text_enabled: enabled },
     }));
 
-  const canSave = useMemo(() => !isLoading && !isSaving, [isLoading, isSaving]);
+  const isDirty = useMemo(
+    () => JSON.stringify(config) !== JSON.stringify(initialConfig),
+    [config, initialConfig],
+  );
+  const canSave = useMemo(
+    () => !isLoading && !isSaving && isDirty,
+    [isLoading, isSaving, isDirty],
+  );
 
   const handleSave = async () => {
     setIsSaving(true);
     setStatus(null);
     try {
       await invoke("set_overlay_config", { config });
+      setInitialConfig(config);
       setStatus("Saved.");
-      setTimeout(() => setStatus(null), 2000);
+      if (statusTimeoutRef.current) {
+        window.clearTimeout(statusTimeoutRef.current);
+      }
+      statusTimeoutRef.current = window.setTimeout(() => setStatus(null), 2000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save.";
-      setStatus(message);
+      setStatus(err instanceof Error ? err.message : "Failed to save.");
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="w-screen h-screen m-0 p-0 overflow-hidden bg-black">
+    <div className="w-screen h-screen m-0 p-0 overflow-hidden bg-linear-to-br from-neutral-950 via-neutral-900 to-neutral-950">
       <div className="overlay-root fixed inset-0">
         <div className="absolute inset-0 flex justify-center">
           <div className="w-full max-w-xl h-full flex flex-col overlay-panel">
@@ -103,27 +137,47 @@ export function Preferences() {
               </div>
 
               <div className="space-y-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">
-                  Overlay position
-                </div>
+                <SectionTitle>Overlay position</SectionTitle>
                 <select
                   value={config.corner}
                   onChange={(e) => setCorner(e.target.value as OverlayCorner)}
-                  className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90"
+                  className="overlay-select w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90"
                 >
-                  <option value="top-left">Top left</option>
-                  <option value="top-right">Top right</option>
-                  <option value="bottom-left">Bottom left</option>
-                  <option value="bottom-right">Bottom right</option>
+                  {OVERLAY_CORNERS.map((corner) => (
+                    <option key={corner} value={corner}>
+                      {corner.replace("-", " ")}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="space-y-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">
-                  Shortcuts
-                </div>
+              <div className="space-y-3">
+                <SectionTitle>Appearance</SectionTitle>
                 <div className="space-y-2">
-                  <div className="text-xs text-white/60">Toggle overlay</div>
+                  <FieldLabel>Panel opacity</FieldLabel>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="0.6"
+                      max="1"
+                      step="0.05"
+                      value={config.appearance.panel_opacity}
+                      onChange={(e) =>
+                        setPanelOpacity(Number(e.target.value))
+                      }
+                      className="overlay-range"
+                    />
+                    <div className="text-xs text-white/60 tabular-nums w-12 text-right">
+                      {Math.round(config.appearance.panel_opacity * 100)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <SectionTitle>Shortcuts</SectionTitle>
+                <div className="space-y-2">
+                  <FieldLabel>Toggle overlay</FieldLabel>
                   <Input
                     aria-label="Toggle overlay shortcut"
                     value={config.keybinds.toggle_overlay}
@@ -134,7 +188,7 @@ export function Preferences() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <div className="text-xs text-white/60">Focus overlay</div>
+                  <FieldLabel>Focus overlay</FieldLabel>
                   <Input
                     aria-label="Focus overlay shortcut"
                     value={config.keybinds.focus_overlay}
@@ -147,9 +201,7 @@ export function Preferences() {
               </div>
 
               <div className="space-y-3">
-                <div className="text-xs uppercase tracking-[0.2em] text-white/40">
-                  Tools
-                </div>
+                <SectionTitle>Tools</SectionTitle>
                 <Switch
                   isSelected={config.tools.capture_screen_text_enabled}
                   onChange={setCaptureEnabled}

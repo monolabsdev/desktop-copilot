@@ -1,6 +1,4 @@
-import { Button } from "@heroui/react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MessageList } from "./components/MessageList";
@@ -11,18 +9,18 @@ import { DEFAULT_MODEL } from "./constants";
 import { CaptureConsentModal } from "./components/CaptureConsentModal";
 import { OllamaRequiredModal } from "./components/OllamaRequiredModal";
 import { useOllamaHealth } from "./hooks/useOllamaHealth";
-
-type OverlayConfig = {
-  tools: {
-    capture_screen_text_enabled: boolean;
-  };
-};
+import { OverlayHeader } from "./components/OverlayHeader";
+import { DEFAULT_OVERLAY_CONFIG, type OverlayConfig } from "../shared/config";
+import { useTauriEvent } from "../shared/hooks/useTauriEvent";
 
 export function Overlay() {
   useOverlayHotkeys();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
+  const [panelOpacity, setPanelOpacity] = useState(
+    DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity,
+  );
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const consentResolver = useRef<
@@ -31,39 +29,48 @@ export function Overlay() {
   const { isOpen, error: ollamaError, handleDownload, handleRetry } =
     useOllamaHealth();
 
-  useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
+  useTauriEvent("overlay:shown", () => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  });
 
-    listen("overlay:shown", () => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }).then((handler) => {
-      unlisten = handler;
-    });
+  useTauriEvent<OverlayConfig>("config:updated", (event) => {
+    setCaptureToolEnabled(event.payload.tools.capture_screen_text_enabled);
+    setPanelOpacity(event.payload.appearance.panel_opacity);
+  });
+
+  const applyPanelOpacity = useCallback((value: number) => {
+    const clamped = Math.min(1, Math.max(0.6, value));
+    document.documentElement.style.setProperty(
+      "--overlay-panel-opacity",
+      clamped.toString(),
+    );
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    invoke<OverlayConfig>("get_overlay_config")
+      .then((loaded) => {
+        if (!active) return;
+        setCaptureToolEnabled(loaded.tools.capture_screen_text_enabled);
+        setPanelOpacity(loaded.appearance.panel_opacity);
+      })
+      .catch(() => {
+        if (!active) return;
+        setCaptureToolEnabled(
+          DEFAULT_OVERLAY_CONFIG.tools.capture_screen_text_enabled,
+        );
+        setPanelOpacity(DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity);
+      });
 
     return () => {
-      if (unlisten) unlisten();
+      active = false;
     };
   }, []);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-    listen<OverlayConfig>("config:updated", (event) => {
-      setCaptureToolEnabled(event.payload.tools.capture_screen_text_enabled);
-    }).then((handler) => {
-      unlisten = handler;
-    });
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
-
-  useEffect(() => {
-    invoke<boolean>("get_capture_tool_enabled")
-      .then((enabled) => setCaptureToolEnabled(enabled))
-      .catch(() => null);
-  }, []);
+    applyPanelOpacity(panelOpacity);
+  }, [applyPanelOpacity, panelOpacity]);
 
   const requestCaptureConsent = useCallback(
     () =>
@@ -122,17 +129,11 @@ export function Overlay() {
         )}
         <div className="absolute inset-0 flex justify-center">
           <div className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel">
-            {/* Header */}
-            <div className="flex justify-end gap-2 px-4 pt-4">
-              <Button
-                size="sm"
-                onPress={clearHistory}
-                isDisabled={messages.length === 0 || isSending}
-                className="bg-white/5 text-white/60 hover:bg-white/10"
-              >
-                Clear history
-              </Button>
-            </div>
+            <OverlayHeader
+              isBusy={isSending}
+              hasMessages={messages.length > 0}
+              onClearHistory={clearHistory}
+            />
 
             {/* Messages */}
             <MessageList messages={messages} isSending={isSending} />

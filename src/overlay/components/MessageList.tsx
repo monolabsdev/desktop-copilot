@@ -17,13 +17,18 @@ export function MessageList({ messages, isSending }: Props) {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
       {messages.length === 0 ? (
-        <div className="text-xs text-white/40">Overlay active.</div>
+        <div className="rounded-md border border-white/10 bg-white/5 p-4 text-center text-xs text-white/60">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
+            Overlay ready
+          </div>
+          <div className="mt-2">
+            Type a question, or try{" "}
+            <span className="text-white/80">/corner</span> to move the panel.
+          </div>
+        </div>
       ) : (
         messages.map((message, index) => (
-          <MessageBubble
-            key={`${message.role}-${index}`}
-            message={message}
-          />
+          <MessageBubble key={`${message.role}-${index}`} message={message} />
         ))
       )}
       {isSending && (

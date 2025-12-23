@@ -1,29 +1,19 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useState } from "react";
 import { ollamaHealthCheck } from "../ollama/client";
+import { useTauriEvent } from "../../shared/hooks/useTauriEvent";
 
 export function useOllamaHealth() {
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
-  useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-
-    // Backend emits this event when startup health check fails.
-    listen<{ ok: boolean; error?: string }>("ollama:health", (event) => {
-      if (event.payload?.ok) return;
-      setError(event.payload?.error ?? "Ollama unreachable.");
-      setIsOpen(true);
-    }).then((handler) => {
-      unlisten = handler;
-    });
-
-    return () => {
-      if (unlisten) unlisten();
-    };
-  }, []);
+  // Backend emits this event when startup health check fails.
+  useTauriEvent<{ ok: boolean; error?: string }>("ollama:health", (event) => {
+    if (event.payload?.ok) return;
+    setError(event.payload?.error ?? "Ollama unreachable.");
+    setIsOpen(true);
+  });
 
   useEffect(() => {
     // Kick an explicit check on mount in case the event fires before the UI is ready.

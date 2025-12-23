@@ -21,6 +21,12 @@ type ChatMessage = Message & {
   thinking?: string;
 };
 
+type AssistantPayload = Message & {
+  reasoning?: string;
+  thinking?: string;
+  thoughts?: string;
+};
+
 const REASONING_MODEL_PATTERN = /(deepseek|reason|think|r1|o1)/i;
 const THINKING_TAGS = [
   /<think>([\s\S]*?)<\/think>/gi,
@@ -49,6 +55,50 @@ function extractThinking(content: string) {
     content: cleaned.trim(),
     thinking: thinkingParts.length ? thinkingParts.join("\n\n").trim() : undefined,
   };
+}
+
+function normalizeAssistantMessage(
+  assistantMessage: AssistantPayload | undefined,
+  model: string,
+) {
+  if (!assistantMessage) throw new Error("Invalid response from Ollama.");
+
+  const responseContent = assistantMessage.content ?? "";
+  const reasoningEnabled = isReasoningModel(model);
+  const responseThinking =
+    assistantMessage.reasoning ??
+    assistantMessage.thinking ??
+    assistantMessage.thoughts;
+
+  const extracted = reasoningEnabled
+    ? extractThinking(responseContent)
+    : { content: responseContent.trim(), thinking: undefined };
+
+  const thinking =
+    reasoningEnabled && typeof responseThinking === "string"
+      ? responseThinking.trim() || extracted.thinking
+      : extracted.thinking;
+
+  const content = extracted.content;
+  const historyMessage: Message = { role: "assistant", content };
+  if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
+
+  return {
+    historyMessage,
+    displayMessage: { ...historyMessage, thinking },
+  };
+}
+
+function toErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function buildToolMessage(payload: unknown): Message {
+  return {
+    role: "tool",
+    content: JSON.stringify(payload),
+    tool_name: "capture_screen_text",
+  } satisfies Message;
 }
 
 export function useOllamaChat(model: string, options?: ToolOptions) {
@@ -96,56 +146,35 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
 
     try {
       const baseMessages = historyRef.current;
-      const response = await ollamaChat({
-        model,
-        messages: baseMessages,
-        tools: toolConfig,
-      });
+    const response = await ollamaChat({
+      model,
+      messages: baseMessages,
+      tools: toolConfig,
+    });
 
-      if (requestId !== requestIdRef.current) return;
+    if (requestId !== requestIdRef.current) return;
 
-      const payload = response as { message?: Message };
-      const assistantMessage = payload?.message as
-        | (Message & { reasoning?: string; thinking?: string; thoughts?: string })
-        | undefined;
-      if (!assistantMessage) throw new Error("Invalid response from Ollama.");
-      const toolCalls = assistantMessage?.tool_calls ?? [];
+    const payload = response as { message?: Message };
+    const assistantMessage = payload?.message as AssistantPayload | undefined;
+    const toolCalls = assistantMessage?.tool_calls ?? [];
 
-      if (toolCalls.length > 0) {
-        // Tool calls are executed locally, then we send a follow-up chat.
-        const toolReply = await handleToolCalls(toolCalls, baseMessages);
-        if (!toolReply) return;
-        return;
-      }
+    if (toolCalls.length > 0) {
+      // Tool calls are executed locally, then we send a follow-up chat.
+      const toolReply = await handleToolCalls(toolCalls, baseMessages);
+      if (!toolReply) return;
+      return;
+    }
 
-      const responseContent = assistantMessage?.content ?? "";
-      const reasoningEnabled = isReasoningModel(model);
-      const responseThinking =
-        assistantMessage?.reasoning ??
-        assistantMessage?.thinking ??
-        assistantMessage?.thoughts;
-      const extracted = reasoningEnabled
-        ? extractThinking(responseContent)
-        : { content: responseContent.trim(), thinking: undefined };
-      const thinking =
-        reasoningEnabled && typeof responseThinking === "string"
-          ? responseThinking.trim() || extracted.thinking
-          : extracted.thinking;
-      const content = extracted.content;
-      const assistantHistoryMessage = { role: "assistant", content };
-      if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
-      appendHistory([assistantHistoryMessage]);
-      setMessages((prev) => [
-        ...prev,
-        { ...assistantHistoryMessage, thinking },
-      ]);
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return;
-      setError(err instanceof Error ? err.message : "Ollama unreachable.");
-    } finally {
-      if (requestId === requestIdRef.current) {
-        setIsSending(false);
-      }
+    const normalized = normalizeAssistantMessage(assistantMessage, model);
+    appendHistory([normalized.historyMessage]);
+    setMessages((prev) => [...prev, normalized.displayMessage]);
+  } catch (err) {
+    if (requestId !== requestIdRef.current) return;
+    setError(toErrorMessage(err, "Ollama unreachable."));
+  } finally {
+    if (requestId === requestIdRef.current) {
+      setIsSending(false);
+    }
     }
   };
 
@@ -181,11 +210,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     }
 
     if (!options?.toolsEnabled || !options.requestScreenCapture) {
-      const toolMessage = {
-        role: "tool",
-        content: JSON.stringify({ error: "Screen capture tool is disabled." }),
-        tool_name: "capture_screen_text",
-      } satisfies Message;
+      const toolMessage = buildToolMessage({
+        error: "Screen capture tool is disabled.",
+      });
 
       appendHistory([
         { role: "assistant", content: "", tool_calls: toolCalls },
@@ -198,11 +225,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
 
     const consent = await options.requestScreenCapture();
     if (!consent.approved) {
-      const toolMessage = {
-        role: "tool",
-        content: JSON.stringify({ error: "User declined screen capture." }),
-        tool_name: "capture_screen_text",
-      } satisfies Message;
+      const toolMessage = buildToolMessage({
+        error: "User declined screen capture.",
+      });
 
       appendHistory([
         { role: "assistant", content: "", tool_calls: toolCalls },
@@ -219,18 +244,13 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       await options.beforeCapture?.();
       toolResponse = await invoke("capture_screen_text");
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(message);
+      throw new Error(toErrorMessage(err, "Screen capture failed."));
     } finally {
       await options.afterCapture?.();
       options.setCaptureInProgress?.(false);
     }
 
-    const toolMessage = {
-      role: "tool",
-      content: JSON.stringify(toolResponse),
-      tool_name: "capture_screen_text",
-    } satisfies Message;
+    const toolMessage = buildToolMessage(toolResponse);
 
     appendHistory([
       { role: "assistant", content: "", tool_calls: toolCalls },
@@ -259,36 +279,15 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     });
 
     const payload = response as { message?: Message };
-    const assistantMessage = payload?.message as
-      | (Message & { reasoning?: string; thinking?: string; thoughts?: string })
-      | undefined;
-    if (!assistantMessage) throw new Error("Invalid response from Ollama.");
+    const assistantMessage = payload?.message as AssistantPayload | undefined;
     const toolCallsFollowup = assistantMessage?.tool_calls ?? [];
     if (toolCallsFollowup.length > 0) {
       await handleToolCalls(toolCallsFollowup, followupMessages);
       return;
     }
 
-    const responseContent = assistantMessage?.content ?? "";
-    const reasoningEnabled = isReasoningModel(model);
-    const responseThinking =
-      assistantMessage?.reasoning ??
-      assistantMessage?.thinking ??
-      assistantMessage?.thoughts;
-    const extracted = reasoningEnabled
-      ? extractThinking(responseContent)
-      : { content: responseContent.trim(), thinking: undefined };
-    const thinking =
-      reasoningEnabled && typeof responseThinking === "string"
-        ? responseThinking.trim() || extracted.thinking
-        : extracted.thinking;
-    const content = extracted.content;
-    const assistantHistoryMessage = { role: "assistant", content };
-    if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
-    appendHistory([assistantHistoryMessage]);
-    setMessages((prev) => [
-      ...prev,
-      { ...assistantHistoryMessage, thinking },
-    ]);
+    const normalized = normalizeAssistantMessage(assistantMessage, model);
+    appendHistory([normalized.historyMessage]);
+    setMessages((prev) => [...prev, normalized.displayMessage]);
   }
 }

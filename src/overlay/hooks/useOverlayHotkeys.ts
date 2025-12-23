@@ -5,7 +5,7 @@ export function useOverlayHotkeys() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        invoke("toggle_overlay");
+        invoke("toggle_overlay").catch(() => null);
       }
     };
 
