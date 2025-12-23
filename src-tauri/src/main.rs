@@ -18,7 +18,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let handle = app.handle();
+            let handle = app.handle().clone();
             let config = config::load_overlay_config(&handle);
             app.manage(overlay::OverlayState::new(config.corner));
             config::save_overlay_config(&handle, &config);
@@ -27,6 +27,13 @@ fn main() {
             if let Some(window) = app.webview_windows().get("overlay") {
                 let state = app.state::<overlay::OverlayState>();
                 overlay::snap_overlay_to_corner(window, state.current_corner());
+                let handle_for_events = handle.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Moved(position) = event {
+                        let state = handle_for_events.state::<overlay::OverlayState>();
+                        state.set_last_position(*position);
+                    }
+                });
             }
             // Run a background health check so the UI can prompt if Ollama is missing.
             tauri::async_runtime::spawn(ollama::emit_health_if_needed(app.handle().clone()));

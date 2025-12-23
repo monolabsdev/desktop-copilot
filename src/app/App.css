@@ -68,6 +68,35 @@ body {
     overflow: hidden;
 }
 
+.overlay-drag-handle {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 30px;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+    cursor: grab;
+    opacity: 0.55;
+    transition:
+        opacity 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
+    touch-action: none;
+}
+
+.overlay-panel:hover .overlay-drag-handle {
+    opacity: 0.9;
+}
+
+.overlay-drag-handle:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+    background: rgba(255, 255, 255, 0.24);
+}
+
 .overlay-input [data-slot="input-wrapper"] {
     background: transparent !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;

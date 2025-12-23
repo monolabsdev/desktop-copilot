@@ -16,12 +16,14 @@ pub enum OverlayCorner {
 
 pub struct OverlayState {
     corner: Mutex<OverlayCorner>,
+    last_position: Mutex<Option<PhysicalPosition<i32>>>,
 }
 
 impl OverlayState {
     pub fn new(initial_corner: OverlayCorner) -> Self {
         Self {
             corner: Mutex::new(initial_corner),
+            last_position: Mutex::new(None),
         }
     }
 
@@ -32,6 +34,22 @@ impl OverlayState {
     pub fn set_corner(&self, corner: OverlayCorner) {
         if let Ok(mut stored) = self.corner.lock() {
             *stored = corner;
+        }
+    }
+
+    pub fn last_position(&self) -> Option<PhysicalPosition<i32>> {
+        self.last_position.lock().ok().and_then(|stored| *stored)
+    }
+
+    pub fn set_last_position(&self, position: PhysicalPosition<i32>) {
+        if let Ok(mut stored) = self.last_position.lock() {
+            *stored = Some(position);
+        }
+    }
+
+    pub fn clear_last_position(&self) {
+        if let Ok(mut stored) = self.last_position.lock() {
+            *stored = None;
         }
     }
 }
@@ -71,7 +89,15 @@ pub fn snap_overlay_to_corner(window: &tauri::WebviewWindow, corner: OverlayCorn
     let _ = window.set_position(Position::Physical(PhysicalPosition { x, y }));
 }
 
-pub fn toggle_overlay_window(window: &tauri::WebviewWindow, corner: OverlayCorner) {
+fn position_overlay_window(window: &tauri::WebviewWindow, state: &OverlayState) {
+    if let Some(position) = state.last_position() {
+        let _ = window.set_position(Position::Physical(position));
+    } else {
+        snap_overlay_to_corner(window, state.current_corner());
+    }
+}
+
+pub fn toggle_overlay_window(window: &tauri::WebviewWindow, state: &OverlayState) {
     let visible = window.is_visible().unwrap_or(false);
 
     if visible {
@@ -80,7 +106,7 @@ pub fn toggle_overlay_window(window: &tauri::WebviewWindow, corner: OverlayCorne
     } else {
         println!("Showing overlay");
         let _ = window.show();
-        snap_overlay_to_corner(window, corner);
+        position_overlay_window(window, state);
         let _ = window.set_focus();
         let _ = window.set_always_on_top(true);
         let _ = window.emit("overlay:shown", ());
@@ -91,7 +117,7 @@ pub fn toggle_overlay_window(window: &tauri::WebviewWindow, corner: OverlayCorne
 pub fn toggle_overlay(app: tauri::AppHandle, state: State<OverlayState>) {
     if let Some(window) = app.webview_windows().get("overlay") {
         println!("Toggling overlay (command)");
-        toggle_overlay_window(window, state.current_corner());
+        toggle_overlay_window(window, &state);
     }
 }
 
@@ -102,6 +128,7 @@ pub fn set_overlay_corner(
     corner: OverlayCorner,
 ) {
     state.set_corner(corner);
+    state.clear_last_position();
     let mut current = config::load_overlay_config(&app);
     current.corner = corner;
     config::save_overlay_config(&app, &current);
@@ -114,5 +141,3 @@ pub fn set_overlay_corner(
 pub fn get_overlay_corner(state: State<OverlayState>) -> OverlayCorner {
     state.current_corner()
 }
-
-

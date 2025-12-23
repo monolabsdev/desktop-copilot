@@ -47,6 +47,12 @@ export function Overlay() {
     );
   }, []);
 
+  const startDragging = useCallback(() => {
+    getCurrentWindow()
+      .startDragging()
+      .catch(() => null);
+  }, []);
+
   useEffect(() => {
     let active = true;
     invoke<OverlayConfig>("get_overlay_config")
@@ -128,7 +134,17 @@ export function Overlay() {
           </div>
         )}
         <div className="absolute inset-0 flex justify-center">
-          <div className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel">
+          <div className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel relative">
+            <button
+              type="button"
+              aria-label="Drag overlay"
+              className="overlay-drag-handle"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                startDragging();
+              }}
+            />
             <OverlayHeader
               isBusy={isSending}
               hasMessages={messages.length > 0}
