@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { MessageList } from "./components/MessageList";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
@@ -26,8 +26,12 @@ export function Overlay() {
   const consentResolver = useRef<
     ((value: { approved: boolean }) => void) | null
   >(null);
-  const { isOpen, error: ollamaError, handleDownload, handleRetry } =
-    useOllamaHealth();
+  const {
+    isOpen,
+    error: ollamaError,
+    handleDownload,
+    handleRetry,
+  } = useOllamaHealth();
 
   useTauriEvent("overlay:shown", () => {
     inputRef.current?.focus();
@@ -45,12 +49,6 @@ export function Overlay() {
       "--overlay-panel-opacity",
       clamped.toString(),
     );
-  }, []);
-
-  const startDragging = useCallback(() => {
-    getCurrentWindow()
-      .startDragging()
-      .catch(() => null);
   }, []);
 
   useEffect(() => {
@@ -77,6 +75,29 @@ export function Overlay() {
   useEffect(() => {
     applyPanelOpacity(panelOpacity);
   }, [applyPanelOpacity, panelOpacity]);
+
+  const startDragging = useCallback(() => {
+    getCurrentWindow()
+      .startDragging()
+      .catch(() => null);
+  }, []);
+
+  const handlePanelPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "input, textarea, button, select, a, [contenteditable=\"true\"], [data-no-drag]",
+        )
+      ) {
+        return;
+      }
+      event.preventDefault();
+      startDragging();
+    },
+    [startDragging],
+  );
 
   const requestCaptureConsent = useCallback(
     () =>
@@ -134,17 +155,10 @@ export function Overlay() {
           </div>
         )}
         <div className="absolute inset-0 flex justify-center">
-          <div className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel relative">
-            <button
-              type="button"
-              aria-label="Drag overlay"
-              className="overlay-drag-handle"
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                event.preventDefault();
-                startDragging();
-              }}
-            />
+          <div
+            className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel"
+            onPointerDown={handlePanelPointerDown}
+          >
             <OverlayHeader
               isBusy={isSending}
               hasMessages={messages.length > 0}

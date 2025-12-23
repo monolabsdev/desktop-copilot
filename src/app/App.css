@@ -58,7 +58,8 @@ body {
         rgba(32, 32, 32, var(--overlay-panel-opacity)),
         rgba(12, 12, 12, var(--overlay-panel-opacity))
     );
-    border: 1px solid rgba(255, 255, 255, calc(0.16 * var(--overlay-panel-opacity)));
+    border: 1px solid
+        rgba(255, 255, 255, calc(0.16 * var(--overlay-panel-opacity)));
     backdrop-filter: blur(18px) saturate(130%);
     -webkit-backdrop-filter: blur(18px) saturate(130%);
     border-radius: 12px;
@@ -67,36 +68,23 @@ body {
     width: calc(100% - 24px);
     overflow: hidden;
 }
-
-.overlay-drag-handle {
-    position: absolute;
-    top: 8px;
-    right: 10px;
-    width: 30px;
-    height: 10px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+.overlay-panel {
     cursor: grab;
-    opacity: 0.55;
-    transition:
-        opacity 0.2s ease,
-        background-color 0.2s ease,
-        transform 0.2s ease;
-    touch-action: none;
 }
 
-.overlay-panel:hover .overlay-drag-handle {
-    opacity: 0.9;
-}
-
-.overlay-drag-handle:active {
+.overlay-panel:active {
     cursor: grabbing;
-    transform: scale(0.98);
-    background: rgba(255, 255, 255, 0.24);
 }
 
+.overlay-panel :is(input, textarea, button, select, a) {
+    cursor: auto;
+}
+
+.overlay-panel [contenteditable="true"] {
+    cursor: text;
+}
+
+.overlay-panel:hover 
 .overlay-input [data-slot="input-wrapper"] {
     background: transparent !important;
     border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
