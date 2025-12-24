@@ -5,9 +5,10 @@ import { MessageBubble } from "./MessageBubble";
 interface Props {
   messages: Array<Message & { thinking?: string }>;
   isSending: boolean;
+  showThinking: boolean;
 }
 
-export function MessageList({ messages, isSending }: Props) {
+export function MessageList({ messages, isSending, showThinking }: Props) {
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -28,7 +29,11 @@ export function MessageList({ messages, isSending }: Props) {
         </div>
       ) : (
         messages.map((message, index) => (
-          <MessageBubble key={`${message.role}-${index}`} message={message} />
+          <MessageBubble
+            key={`${message.role}-${index}`}
+            message={message}
+            showThinking={showThinking}
+          />
         ))
       )}
       {isSending && (

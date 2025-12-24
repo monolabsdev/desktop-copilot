@@ -86,7 +86,8 @@ fn main() {
             config::set_overlay_config,
             capture::capture_screen_text,
             ollama::ollama_health_check,
-            ollama::ollama_chat
+            ollama::ollama_chat,
+            ollama::ollama_chat_stream
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

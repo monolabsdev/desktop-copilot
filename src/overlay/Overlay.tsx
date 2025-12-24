@@ -21,6 +21,9 @@ export function Overlay() {
   const [panelOpacity, setPanelOpacity] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity,
   );
+  const [showThinking, setShowThinking] = useState(
+    DEFAULT_OVERLAY_CONFIG.appearance.show_thinking,
+  );
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const consentResolver = useRef<
@@ -41,6 +44,7 @@ export function Overlay() {
   useTauriEvent<OverlayConfig>("config:updated", (event) => {
     setCaptureToolEnabled(event.payload.tools.capture_screen_text_enabled);
     setPanelOpacity(event.payload.appearance.panel_opacity);
+    setShowThinking(event.payload.appearance.show_thinking);
   });
 
   const applyPanelOpacity = useCallback((value: number) => {
@@ -58,6 +62,7 @@ export function Overlay() {
         if (!active) return;
         setCaptureToolEnabled(loaded.tools.capture_screen_text_enabled);
         setPanelOpacity(loaded.appearance.panel_opacity);
+        setShowThinking(loaded.appearance.show_thinking);
       })
       .catch(() => {
         if (!active) return;
@@ -65,6 +70,7 @@ export function Overlay() {
           DEFAULT_OVERLAY_CONFIG.tools.capture_screen_text_enabled,
         );
         setPanelOpacity(DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity);
+        setShowThinking(DEFAULT_OVERLAY_CONFIG.appearance.show_thinking);
       });
 
     return () => {
@@ -166,7 +172,11 @@ export function Overlay() {
             />
 
             {/* Messages */}
-            <MessageList messages={messages} isSending={isSending} />
+            <MessageList
+              messages={messages}
+              isSending={isSending}
+              showThinking={showThinking}
+            />
 
             {/* Error */}
             {error && (

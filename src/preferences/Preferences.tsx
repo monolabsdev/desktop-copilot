@@ -77,10 +77,17 @@ export function Preferences() {
       ...prev,
       keybinds: { ...prev.keybinds, [key]: value },
     }));
+  // When adding a new config field, add a setter and UI control here so it
+  // stays in sync with DEFAULT_OVERLAY_CONFIG and the Rust config structs.
   const setPanelOpacity = (value: number) =>
     setConfig((prev) => ({
       ...prev,
       appearance: { ...prev.appearance, panel_opacity: value },
+    }));
+  const setShowThinking = (enabled: boolean) =>
+    setConfig((prev) => ({
+      ...prev,
+      appearance: { ...prev.appearance, show_thinking: enabled },
     }));
   const setCaptureEnabled = (enabled: boolean) =>
     setConfig((prev) => ({
@@ -167,6 +174,18 @@ export function Preferences() {
                     </div>
                   </div>
                 </div>
+                <Switch
+                  isSelected={config.appearance.show_thinking}
+                  onChange={setShowThinking}
+                  className="items-center gap-3"
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Label className="text-sm text-white/80">
+                    Show reasoning blocks
+                  </Label>
+                </Switch>
               </div>
 
               <div className="space-y-4">

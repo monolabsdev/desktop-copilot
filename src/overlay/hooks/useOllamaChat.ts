@@ -1,9 +1,10 @@
 import { useRef, useState } from "react";
+import { listen, type Event } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
 import { CAPTURE_SCREEN_TEXT_TOOL } from "../tools/captureScreenText";
-import { ollamaChat } from "../ollama/client";
+import { ollamaChatStream } from "../ollama/client";
 
 type CaptureConsent = {
   approved: boolean;
@@ -19,6 +20,7 @@ type ToolOptions = {
 
 type ChatMessage = Message & {
   thinking?: string;
+  streamId?: number;
 };
 
 type AssistantPayload = Message & {
@@ -27,15 +29,10 @@ type AssistantPayload = Message & {
   thoughts?: string;
 };
 
-const REASONING_MODEL_PATTERN = /(deepseek|reason|think|r1|o1)/i;
 const THINKING_TAGS = [
   /<think>([\s\S]*?)<\/think>/gi,
   /<thinking>([\s\S]*?)<\/thinking>/gi,
 ];
-
-function isReasoningModel(model: string) {
-  return REASONING_MODEL_PATTERN.test(model);
-}
 
 function extractThinking(content: string) {
   let cleaned = content;
@@ -53,31 +50,35 @@ function extractThinking(content: string) {
 
   return {
     content: cleaned.trim(),
-    thinking: thinkingParts.length ? thinkingParts.join("\n\n").trim() : undefined,
+    thinking: thinkingParts.length
+      ? thinkingParts.join("\n\n").trim()
+      : undefined,
   };
+}
+
+function normalizeThinkingValue(value?: string) {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^[\.\?\!]+$/.test(trimmed)) return undefined;
+  return trimmed;
 }
 
 function normalizeAssistantMessage(
   assistantMessage: AssistantPayload | undefined,
-  model: string,
 ) {
   if (!assistantMessage) throw new Error("Invalid response from Ollama.");
 
   const responseContent = assistantMessage.content ?? "";
-  const reasoningEnabled = isReasoningModel(model);
-  const responseThinking =
+  const responseThinking = normalizeThinkingValue(
     assistantMessage.reasoning ??
-    assistantMessage.thinking ??
-    assistantMessage.thoughts;
+      assistantMessage.thinking ??
+      assistantMessage.thoughts,
+  );
 
-  const extracted = reasoningEnabled
-    ? extractThinking(responseContent)
-    : { content: responseContent.trim(), thinking: undefined };
-
-  const thinking =
-    reasoningEnabled && typeof responseThinking === "string"
-      ? responseThinking.trim() || extracted.thinking
-      : extracted.thinking;
+  const extracted = extractThinking(responseContent);
+  const extractedThinking = normalizeThinkingValue(extracted.thinking);
+  const thinking = responseThinking ?? extractedThinking;
 
   const content = extracted.content;
   const historyMessage: Message = { role: "assistant", content };
@@ -107,8 +108,11 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const streamMessageIdRef = useRef(0);
   const historyRef = useRef<Message[]>([]);
-  const toolConfig = options?.toolsEnabled ? [CAPTURE_SCREEN_TEXT_TOOL] : undefined;
+  const toolConfig = options?.toolsEnabled
+    ? [CAPTURE_SCREEN_TEXT_TOOL]
+    : undefined;
 
   const appendHistory = (entries: Message[]) => {
     historyRef.current = [...historyRef.current, ...entries];
@@ -146,35 +150,34 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
 
     try {
       const baseMessages = historyRef.current;
-    const response = await ollamaChat({
-      model,
-      messages: baseMessages,
-      tools: toolConfig,
-    });
+      const result = await streamOllamaChat(baseMessages, requestId);
+      if (!result || requestId !== requestIdRef.current) return;
 
-    if (requestId !== requestIdRef.current) return;
+      if (result.toolCalls && result.toolCalls.length > 0) {
+        // Tool calls are executed locally, then we send a follow-up chat.
+        const toolReply = await handleToolCalls(result.toolCalls, baseMessages);
+        if (!toolReply) return;
+        return;
+      }
 
-    const payload = response as { message?: Message };
-    const assistantMessage = payload?.message as AssistantPayload | undefined;
-    const toolCalls = assistantMessage?.tool_calls ?? [];
-
-    if (toolCalls.length > 0) {
-      // Tool calls are executed locally, then we send a follow-up chat.
-      const toolReply = await handleToolCalls(toolCalls, baseMessages);
-      if (!toolReply) return;
-      return;
-    }
-
-    const normalized = normalizeAssistantMessage(assistantMessage, model);
-    appendHistory([normalized.historyMessage]);
-    setMessages((prev) => [...prev, normalized.displayMessage]);
-  } catch (err) {
-    if (requestId !== requestIdRef.current) return;
-    setError(toErrorMessage(err, "Ollama unreachable."));
-  } finally {
-    if (requestId === requestIdRef.current) {
-      setIsSending(false);
-    }
+      if (result.assistantMessage) {
+        const normalized = normalizeAssistantMessage(result.assistantMessage);
+        appendHistory([normalized.historyMessage]);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.streamId === result.streamMessageId
+              ? { ...normalized.displayMessage }
+              : message,
+          ),
+        );
+      }
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      setError(toErrorMessage(err, "Ollama unreachable."));
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setIsSending(false);
+      }
     }
   };
 
@@ -205,7 +208,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     toolCalls: NonNullable<Message["tool_calls"]>,
     baseMessages: Message[],
   ) {
-    if (!toolCalls.some((call) => call.function?.name === "capture_screen_text")) {
+    if (
+      !toolCalls.some((call) => call.function?.name === "capture_screen_text")
+    ) {
       throw new Error("Unsupported tool call.");
     }
 
@@ -272,22 +277,192 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       toolMessage,
     ];
 
-    const response = await ollamaChat({
-      model,
-      messages: followupMessages,
-      tools: toolConfig,
-    });
+    const requestId = requestIdRef.current;
+    const result = await streamOllamaChat(followupMessages, requestId);
+    if (!result || requestId !== requestIdRef.current) return;
 
-    const payload = response as { message?: Message };
-    const assistantMessage = payload?.message as AssistantPayload | undefined;
-    const toolCallsFollowup = assistantMessage?.tool_calls ?? [];
-    if (toolCallsFollowup.length > 0) {
-      await handleToolCalls(toolCallsFollowup, followupMessages);
+    if (result.toolCalls && result.toolCalls.length > 0) {
+      await handleToolCalls(result.toolCalls, followupMessages);
       return;
     }
 
-    const normalized = normalizeAssistantMessage(assistantMessage, model);
-    appendHistory([normalized.historyMessage]);
-    setMessages((prev) => [...prev, normalized.displayMessage]);
+    if (result.assistantMessage) {
+      const normalized = normalizeAssistantMessage(result.assistantMessage);
+      appendHistory([normalized.historyMessage]);
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.streamId === result.streamMessageId
+            ? { ...normalized.displayMessage }
+            : message,
+        ),
+      );
+    }
+  }
+
+  type StreamPayload = {
+    stream_id: string;
+    chunk?: {
+      done?: boolean;
+      message?: AssistantPayload;
+    };
+    error?: string;
+  };
+
+  type StreamResult = {
+    assistantMessage?: AssistantPayload;
+    toolCalls?: NonNullable<Message["tool_calls"]>;
+    streamMessageId?: number;
+  };
+
+  async function streamOllamaChat(
+    baseMessages: Message[],
+    requestId: number,
+  ): Promise<StreamResult | null> {
+    const streamId = `stream-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let streamedMessageId: number | null = null;
+    let content = "";
+    let finished = false;
+    let latestMessage: AssistantPayload | null = null;
+    let latestReasoning: string | undefined;
+    let latestThinking: string | undefined;
+    let latestThoughts: string | undefined;
+
+    const ensureStreamingMessage = () => {
+      if (streamedMessageId !== null) return;
+      const nextId = streamMessageIdRef.current + 1;
+      streamedMessageId = nextId;
+      streamMessageIdRef.current = nextId;
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "", streamId: nextId },
+      ]);
+    };
+
+    const updateStreamingContent = () => {
+      if (streamedMessageId === null) return;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.streamId === streamedMessageId
+            ? { ...message, content }
+            : message,
+        ),
+      );
+    };
+
+    const removeStreamingMessage = () => {
+      if (streamedMessageId === null) return;
+      setMessages((prev) =>
+        prev.filter((message) => message.streamId !== streamedMessageId),
+      );
+    };
+
+    const result = await new Promise<StreamResult | null>((resolve, reject) => {
+      let unlisten: (() => void) | null = null;
+
+      const cleanup = () => {
+        if (unlisten) unlisten();
+      };
+
+      const handler = (event: Event<StreamPayload>) => {
+        if (finished) return;
+        if (requestId !== requestIdRef.current) {
+          finished = true;
+          cleanup();
+          removeStreamingMessage();
+          resolve(null);
+          return;
+        }
+
+        const payload = event.payload;
+        if (payload.stream_id !== streamId) return;
+
+        if (payload.error) {
+          finished = true;
+          cleanup();
+          removeStreamingMessage();
+          reject(new Error(payload.error));
+          return;
+        }
+
+        const chunk = payload.chunk;
+        if (!chunk) return;
+        const message = chunk.message;
+        if (message) {
+          latestMessage = message;
+          const normalizedReasoning = normalizeThinkingValue(message.reasoning);
+          if (normalizedReasoning) {
+            latestReasoning = normalizedReasoning;
+          }
+          const normalizedThinking = normalizeThinkingValue(message.thinking);
+          if (normalizedThinking) {
+            latestThinking = normalizedThinking;
+          }
+          const normalizedThoughts = normalizeThinkingValue(message.thoughts);
+          if (normalizedThoughts) {
+            latestThoughts = normalizedThoughts;
+          }
+        }
+
+        if (message?.tool_calls?.length) {
+          finished = true;
+          cleanup();
+          removeStreamingMessage();
+          resolve({ toolCalls: message.tool_calls });
+          return;
+        }
+
+        const delta =
+          typeof message?.content === "string" ? message.content : "";
+        if (delta) {
+          content += delta;
+          ensureStreamingMessage();
+          updateStreamingContent();
+        }
+
+        if (chunk.done) {
+          finished = true;
+          cleanup();
+          ensureStreamingMessage();
+          const assistantMessage: AssistantPayload = {
+            role: "assistant",
+            ...(latestMessage ?? {}),
+            content,
+          };
+          if (latestReasoning && !assistantMessage.reasoning) {
+            assistantMessage.reasoning = latestReasoning;
+          }
+          if (latestThinking && !assistantMessage.thinking) {
+            assistantMessage.thinking = latestThinking;
+          }
+          if (latestThoughts && !assistantMessage.thoughts) {
+            assistantMessage.thoughts = latestThoughts;
+          }
+          resolve({
+            assistantMessage,
+            streamMessageId: streamedMessageId ?? undefined,
+          });
+        }
+      };
+
+      listen<StreamPayload>("ollama:chunk", handler)
+        .then((unsubscribe) => {
+          unlisten = unsubscribe;
+          return ollamaChatStream(
+            {
+              model,
+              messages: baseMessages,
+              tools: toolConfig,
+            },
+            streamId,
+          );
+        })
+        .catch((err) => {
+          finished = true;
+          cleanup();
+          reject(err);
+        });
+    });
+
+    return result;
   }
 }

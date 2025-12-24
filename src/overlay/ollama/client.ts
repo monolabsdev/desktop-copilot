@@ -22,5 +22,18 @@ export async function ollamaChat(request: OllamaChatRequest) {
     stream: false,
   };
   if (request.tools) payload.tools = request.tools;
-  return invoke<OllamaChatResponse>("ollama_chat", { request: payload });
+  return invoke<OllamaChatResponse>("ollama_chat", { request: payload });       
+}
+
+export async function ollamaChatStream(
+  request: OllamaChatRequest,
+  streamId: string,
+) {
+  const payload: Record<string, unknown> = {
+    model: request.model,
+    messages: request.messages,
+    stream: true,
+  };
+  if (request.tools) payload.tools = request.tools;
+  return invoke("ollama_chat_stream", { request: payload, streamId });
 }

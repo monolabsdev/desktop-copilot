@@ -25,6 +25,8 @@ pub struct ToolConfig {
 pub struct AppearanceConfig {
     #[serde(default = "default_panel_opacity")]
     pub panel_opacity: f32,
+    #[serde(default = "default_show_thinking")]
+    pub show_thinking: bool,
 }
 
 fn default_capture_tool_enabled() -> bool {
@@ -33,6 +35,10 @@ fn default_capture_tool_enabled() -> bool {
 
 fn default_panel_opacity() -> f32 {
     0.85
+}
+
+fn default_show_thinking() -> bool {
+    true
 }
 
 impl Default for ToolConfig {
@@ -56,6 +62,7 @@ impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
             panel_opacity: default_panel_opacity(),
+            show_thinking: default_show_thinking(),
         }
     }
 }
@@ -70,6 +77,11 @@ pub struct OverlayConfig {
     #[serde(default)]
     pub tools: ToolConfig,
 }
+// Adding a new config setting:
+// - Add the field + serde default here (or in the nested config struct).
+// - Update the Default impls below.
+// - Mirror the shape in `src/shared/config.ts` (type + defaults).
+// - Expose UI in Preferences if user-editable.
 
 impl Default for OverlayConfig {
     fn default() -> Self {

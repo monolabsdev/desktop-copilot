@@ -66,6 +66,10 @@ Example:
     "toggle_overlay": "Ctrl+Space",
     "focus_overlay": "Ctrl+Shift+Space"
   },
+  "appearance": {
+    "panel_opacity": 0.85,
+    "show_thinking": true
+  },
   "tools": {
     "capture_screen_text_enabled": true
   }
@@ -73,8 +77,19 @@ Example:
 ```
 
 Notes:
-- `corner` accepts `top-left`, `top-right`, `bottom-left`, `bottom-right`.
+- `corner` accepts `top-left`, `top-right`, `bottom-left`, `bottom-right`.      
 - `keybinds` lets you customize global shortcuts. Restart the app after editing.
+
+### Adding custom config settings
+
+Use the `show_thinking` toggle (added in this repo) as a reference:
+
+1. Add the field in `src-tauri/src/config.rs` with `#[serde(default = "...")]`,
+   plus a default helper and `Default` impl update.
+2. Mirror the field in `src/shared/config.ts` (type + `DEFAULT_OVERLAY_CONFIG`).
+3. Wire the UI in `src/preferences/Preferences.tsx` if it should be editable.
+4. Consume the setting where it matters (example: `src/overlay/Overlay.tsx`
+   passes `showThinking` down to `src/overlay/components/MessageBubble.tsx`).
 
 ## OCR support
 

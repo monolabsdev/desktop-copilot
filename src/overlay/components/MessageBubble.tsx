@@ -5,6 +5,7 @@ import type { Message } from "ollama";
 
 interface Props {
   message: Message & { thinking?: string };
+  showThinking: boolean;
 }
 
 const markdownComponents = {
@@ -30,10 +31,11 @@ const markdownComponents = {
   ),
 };
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({ message, showThinking }: Props) {
   const isUser = message.role === "user";
   const label = isUser ? "You" : "AI";
-  const thinking = !isUser ? message.thinking?.trim() : undefined;
+  const thinking =
+    !isUser && showThinking ? message.thinking?.trim() : undefined;
   const content = message.content?.trim() ?? "";
   const showContent = isUser || content.length > 0;
 
