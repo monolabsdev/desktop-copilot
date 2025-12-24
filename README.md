@@ -112,8 +112,7 @@ Windows Media OCR and may prompt for a language pack if one is missing.
   like a screen recorder: only use it where you have permission.
 - The AI runs locally via Ollama. Large models are slow and memory-heavy.
 - Global hotkeys can conflict with other apps. Adjust them in the config.
-
-- ONLY WAY TO CLOSE THE APP IS FROM TASK MANAGER AT THE MOMENT.
+- The way to shut the app down is either by ALT + F4 / Task manager / System tray icon
 
 ## Disclaimer (read this if you plan to hack on it)
 
