@@ -14,7 +14,7 @@ pub struct OllamaHealthPayload {
 
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(12))
         .build()
         .map_err(|err| format!("HTTP client error: {err}"))
 }
