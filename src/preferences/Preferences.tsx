@@ -31,10 +31,7 @@ export function Preferences() {
   const statusTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const clamped = Math.min(
-      1,
-      Math.max(0.6, config.appearance.panel_opacity),
-    );
+    const clamped = Math.min(1, Math.max(0.6, config.appearance.panel_opacity));
     document.documentElement.style.setProperty(
       "--overlay-panel-opacity",
       clamped.toString(),
@@ -162,9 +159,7 @@ export function Preferences() {
                       max="1"
                       step="0.05"
                       value={config.appearance.panel_opacity}
-                      onChange={(e) =>
-                        setPanelOpacity(Number(e.target.value))
-                      }
+                      onChange={(e) => setPanelOpacity(Number(e.target.value))}
                       className="overlay-range"
                     />
                     <div className="text-xs text-white/60 tabular-nums w-12 text-right">
