@@ -8,7 +8,7 @@ Ollama server.
 
 **Supported Operating Systems:**
 - [x] Windows
-- [ ] MacOS
+- [x] MacOS (dev)
 - [ ] Linux
 
 ## Quick start
