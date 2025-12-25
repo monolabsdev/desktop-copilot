@@ -1,6 +1,7 @@
 use serde::Serialize;
 use tauri::AppHandle;
 
+#[cfg(target_os = "windows")]
 use crate::config;
 
 #[derive(Debug, Serialize)]
