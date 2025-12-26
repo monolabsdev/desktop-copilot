@@ -6,7 +6,7 @@ Versions marked `dev` indicate unstable development builds.
 
 ---
 
-## [0.2.0-dev.2] â€“ Release Candidate
+## [0.2.0-dev.2] Release Candidate
 This development release focuses on overlay UX upgrades, chat controls, and tool feedback.
 
 ### Added
@@ -37,7 +37,7 @@ This development release focuses on overlay UX upgrades, chat controls, and tool
 
 ---
 
-## [0.2.0-dev.1] â€“ Release Candidate
+## [0.2.0-dev.1] Release Candidate
 This development release consolidates multiple feature additions and UI changes that significantly expand the application beyond the initial `0.1.x` scope.
 
 ### Added
@@ -65,7 +65,7 @@ This development release consolidates multiple feature additions and UI changes 
 
 ---
 
-## [0.1.3] â€“ Experimental
+## [0.1.3] Experimental
 
 ### Added
 - Experimental window dragging functionality
@@ -73,14 +73,14 @@ This development release consolidates multiple feature additions and UI changes 
 
 ---
 
-## [0.1.2] â€“ Experimental
+## [0.1.2] Experimental
 
 ### Added
 - Experimental drag handle for window movement
 
 ---
 
-## [0.1.1] â€“ Early Development
+## [0.1.1] Early Development
 
 ### Added
 - Initial preferences support
