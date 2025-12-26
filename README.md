@@ -127,6 +127,7 @@ Windows Media OCR and may prompt for a language pack if one is missing.
 - Global hotkeys can conflict with other apps. Adjust them in the config.
 - You can close the app by right-clicking the tray icon and selecting "Quit".
 
+
 ## Disclaimer (read this if you plan to hack on it)
 
 This project is intentionally minimal and leans on some lazy programming
