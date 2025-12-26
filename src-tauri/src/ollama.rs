@@ -15,7 +15,7 @@ pub struct OllamaHealthPayload {
 
 fn build_client() -> Result<reqwest::Client, String> {
     reqwest::Client::builder()
-        .timeout(Duration::from_secs(12))
+        .timeout(Duration::from_secs(32))
         .build()
         .map_err(|err| format!("HTTP client error: {err}"))
 }
@@ -52,6 +52,7 @@ async fn check_ollama_health() -> Result<(), String> {
 }
 
 pub async fn emit_health_if_needed(app: AppHandle) {
+    // Only emit on failure to avoid spamming the UI.
     if let Err(err) = check_ollama_health().await {
         let payload = OllamaHealthPayload {
             ok: false,
@@ -151,6 +152,7 @@ pub async fn ollama_chat_stream(
             match chunk {
                 Ok(bytes) => {
                     buffer.extend_from_slice(&bytes);
+                    // Ollama streams NDJSON chunks separated by newlines.
                     while let Some(pos) = buffer.iter().position(|byte| *byte == b'\n') {
                         let line = buffer.drain(..=pos).collect::<Vec<u8>>();
                         let line = match std::str::from_utf8(&line) {

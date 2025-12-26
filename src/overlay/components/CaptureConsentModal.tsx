@@ -1,5 +1,5 @@
-import { Button } from "@heroui/react";
-import { ModalShell } from "../../shared/ui/ModalShell";
+import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/shared/ui/ModalShell";
 interface Props {
   isOpen: boolean;
   onApprove: () => void;
@@ -21,14 +21,14 @@ export function CaptureConsentModal({
           <Button
             size="sm"
             className="bg-white/10 text-white/80"
-            onPress={onCancel}
+            onClick={onCancel}
           >
             Cancel
           </Button>
           <Button
             size="sm"
             className="bg-white text-black hover:bg-white/90"
-            onPress={onApprove}
+            onClick={onApprove}
           >
             Capture
           </Button>

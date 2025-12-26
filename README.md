@@ -33,6 +33,19 @@ Build:
 npm run tauri build
 ```
 
+## Overlay shortcuts
+
+- Toggle overlay: `Ctrl+Space`
+- Focus overlay: `Ctrl+Shift+Space`
+- Stop generation: `Ctrl+.`
+- Regenerate last response: `Ctrl+Shift+R`
+- Input history: `Up / Down` (when the input caret is at the start/end)
+
+## Chat commands
+
+- `/clear` clears chat history
+- `/corner <top-left|top-right|bottom-left|bottom-right>` moves the overlay
+
 ## Ollama integration (required)
 
 This app does not call Ollama from the frontend. All requests are proxied through
@@ -93,7 +106,7 @@ Use the `show_thinking` toggle (added in this repo) as a reference:
 
 ## OCR support
 
-The `capture_screen_text` tool captures the active window only. Windows uses
+The `capture_screen_text` tool captures the active window only. Windows uses    
 Windows Media OCR and may prompt for a language pack if one is missing.
 
 ## Troubleshooting
@@ -112,8 +125,7 @@ Windows Media OCR and may prompt for a language pack if one is missing.
   like a screen recorder: only use it where you have permission.
 - The AI runs locally via Ollama. Large models are slow and memory-heavy.
 - Global hotkeys can conflict with other apps. Adjust them in the config.
-
-- ONLY WAY TO CLOSE THE APP IS FROM TASK MANAGER AT THE MOMENT.
+- You can close the app by right-clicking the tray icon and selecting "Quit".
 
 ## Disclaimer (read this if you plan to hack on it)
 

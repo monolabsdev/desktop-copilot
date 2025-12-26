@@ -1,24 +1,38 @@
-import { Button, Input, Label, Switch } from "@heroui/react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { StatusChip } from "@/components/ui/status-chip";
+import {
+  PanelBody,
+  PanelEyebrow,
+  PanelFieldLabel,
+  PanelFooter,
+  PanelFrame,
+  PanelRoot,
+  PanelRow,
+  PanelSectionTitle,
+  PanelStack,
+  PanelStage,
+  PanelSubtitle,
+  PanelTitle,
+} from "@/components/layout/panel";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   DEFAULT_OVERLAY_CONFIG,
   OVERLAY_CORNERS,
   type OverlayConfig,
   type OverlayCorner,
 } from "../shared/config";
-
-function SectionTitle({ children }: { children: string }) {
-  return (
-    <div className="text-xs uppercase tracking-[0.2em] text-white/40">
-      {children}
-    </div>
-  );
-}
-
-function FieldLabel({ children }: { children: string }) {
-  return <div className="text-xs text-white/60">{children}</div>;
-}
 
 export function Preferences() {
   const [config, setConfig] = useState<OverlayConfig>(DEFAULT_OVERLAY_CONFIG);
@@ -94,6 +108,11 @@ export function Preferences() {
       ...prev,
       tools: { ...prev.tools, capture_screen_text_enabled: enabled },
     }));
+  const setAgentEnabled = (enabled: boolean) =>
+    setConfig((prev) => ({
+      ...prev,
+      tools: { ...prev.tools, agent_enabled: enabled },
+    }));
 
   const isDirty = useMemo(
     () => JSON.stringify(config) !== JSON.stringify(initialConfig),
@@ -123,128 +142,143 @@ export function Preferences() {
   };
 
   return (
-    <div className="w-screen h-screen m-0 p-0 overflow-hidden bg-linear-to-br from-neutral-950 via-neutral-900 to-neutral-950">
-      <div className="overlay-root fixed inset-0">
-        <div className="absolute inset-0 flex justify-center">
-          <div className="w-full max-w-xl h-full flex flex-col overlay-panel">
-            <div className="flex-1 min-h-0 overflow-y-auto p-6 flex flex-col gap-6">
-              <div>
-                <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">
-                  Preferences
-                </div>
-                <div className="text-lg text-white/90 mt-2">
-                  Desktop Copilot
-                </div>
-                <div className="text-xs text-white/50 mt-1">
-                  Changes apply immediately where possible.
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <SectionTitle>Overlay position</SectionTitle>
-                <select
-                  value={config.corner}
-                  onChange={(e) => setCorner(e.target.value as OverlayCorner)}
-                  className="overlay-select w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90"
-                >
-                  {OVERLAY_CORNERS.map((corner) => (
-                    <option key={corner} value={corner}>
-                      {corner.replace("-", " ")}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-3">
-                <SectionTitle>Appearance</SectionTitle>
-                <div className="space-y-2">
-                  <FieldLabel>Panel opacity</FieldLabel>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min="0.6"
-                      max="1"
-                      step="0.05"
-                      value={config.appearance.panel_opacity}
-                      onChange={(e) => setPanelOpacity(Number(e.target.value))}
-                      className="overlay-range"
-                    />
-                    <div className="text-xs text-white/60 tabular-nums w-12 text-right">
-                      {Math.round(config.appearance.panel_opacity * 100)}%
-                    </div>
-                  </div>
-                </div>
-                <Switch
-                  isSelected={config.appearance.show_thinking}
-                  onChange={setShowThinking}
-                  className="items-center gap-3"
-                >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <Label className="text-sm text-white/80">
-                    Show reasoning blocks
-                  </Label>
-                </Switch>
-              </div>
-
-              <div className="space-y-4">
-                <SectionTitle>Shortcuts</SectionTitle>
-                <div className="space-y-2">
-                  <FieldLabel>Toggle overlay</FieldLabel>
-                  <Input
-                    aria-label="Toggle overlay shortcut"
-                    value={config.keybinds.toggle_overlay}
-                    onChange={(e) =>
-                      setKeybind("toggle_overlay", e.target.value)
-                    }
-                    className="overlay-input"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <FieldLabel>Focus overlay</FieldLabel>
-                  <Input
-                    aria-label="Focus overlay shortcut"
-                    value={config.keybinds.focus_overlay}
-                    onChange={(e) =>
-                      setKeybind("focus_overlay", e.target.value)
-                    }
-                    className="overlay-input"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <SectionTitle>Tools</SectionTitle>
-                <Switch
-                  isSelected={config.tools.capture_screen_text_enabled}
-                  onChange={setCaptureEnabled}
-                  className="items-center gap-3"
-                >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
-                  <Label className="text-sm text-white/80">
-                    Capture active window text
-                  </Label>
-                </Switch>
-              </div>
+    <PanelRoot variant="preferences">
+      <PanelStage>
+        <PanelFrame
+          variant="preferences"
+          className="overlay-panel preferences-panel"
+        >
+          <PanelBody>
+            <div>
+              <PanelEyebrow>Preferences</PanelEyebrow>
+              <PanelTitle>Desktop Copilot</PanelTitle>
+              <PanelSubtitle>
+                Changes apply immediately where possible.
+              </PanelSubtitle>
             </div>
 
-            <div className="flex items-center justify-between px-6 pb-6 pt-2">
-              <div className="text-xs text-white/50">{status ?? " "}</div>
-              <Button
-                size="sm"
-                isDisabled={!canSave}
-                onPress={handleSave}
-                className="bg-white/10 text-white/80 hover:bg-white/20"
+            <PanelStack gap="lg">
+              <PanelSectionTitle>Overlay position</PanelSectionTitle>
+              <Select
+                value={config.corner}
+                onValueChange={(value: string) =>
+                  setCorner(value as OverlayCorner)
+                }
               >
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+                <SelectTrigger className="overlay-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OVERLAY_CORNERS.map((corner) => (
+                    <SelectItem key={corner} value={corner}>
+                      {corner.replace("-", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </PanelStack>
+
+            <PanelStack gap="md">
+              <PanelSectionTitle>Appearance</PanelSectionTitle>
+              <PanelStack gap="sm">
+                <PanelFieldLabel>Panel opacity</PanelFieldLabel>
+                <PanelRow>
+                  <Slider
+                    min={0.6}
+                    max={1}
+                    step={0.05}
+                    value={[config.appearance.panel_opacity]}
+                    onValueChange={(value: number[]) => {
+                      const next = value[0];
+                      if (typeof next === "number") {
+                        setPanelOpacity(next);
+                      }
+                    }}
+                    className="overlay-range"
+                  />
+                  <div className="panel-value">
+                    {Math.round(config.appearance.panel_opacity * 100)}%
+                  </div>
+                </PanelRow>
+              </PanelStack>
+              <PanelRow>
+                <Switch
+                  id="show-thinking"
+                  checked={config.appearance.show_thinking}
+                  onCheckedChange={setShowThinking}
+                />
+                <Label htmlFor="show-thinking" className="panel-label">
+                  Show reasoning blocks
+                </Label>
+              </PanelRow>
+            </PanelStack>
+
+            <PanelStack gap="lg">
+              <PanelSectionTitle>Shortcuts</PanelSectionTitle>
+              <PanelStack gap="sm">
+                <PanelFieldLabel>Toggle overlay</PanelFieldLabel>
+                <Input
+                  aria-label="Toggle overlay shortcut"
+                  value={config.keybinds.toggle_overlay}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setKeybind("toggle_overlay", e.target.value)
+                  }
+                  className="overlay-input"
+                />
+              </PanelStack>
+              <PanelStack gap="sm">
+                <PanelFieldLabel>Focus overlay</PanelFieldLabel>
+                <Input
+                  aria-label="Focus overlay shortcut"
+                  value={config.keybinds.focus_overlay}
+                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                    setKeybind("focus_overlay", e.target.value)
+                  }
+                  className="overlay-input"
+                />
+              </PanelStack>
+            </PanelStack>
+
+            <PanelStack gap="md">
+              <PanelSectionTitle>Tools</PanelSectionTitle>
+              <PanelRow>
+                <Switch
+                  id="capture-screen-text"
+                  checked={config.tools.capture_screen_text_enabled}
+                  onCheckedChange={setCaptureEnabled}
+                />
+                <Label htmlFor="capture-screen-text" className="panel-label">
+                  Capture active window text
+                </Label>
+                <StatusChip variant="beta" />
+              </PanelRow>
+              <PanelRow>
+                <Switch
+                  id="agent-enabled"
+                  checked={config.tools.agent_enabled}
+                  onCheckedChange={setAgentEnabled}
+                />
+                <Label htmlFor="agent-enabled" className="panel-label">
+                  Enable agent mode (file access)
+                </Label>
+                <StatusChip variant="experimental" />
+              </PanelRow>
+            </PanelStack>
+          </PanelBody>
+
+          <PanelFooter>
+            <div className="panel-status">{status ?? " "}</div>
+            <Button
+              size="sm"
+              disabled={!canSave}
+              onClick={handleSave}
+              className="bg-white/10 text-white/80 hover:bg-white/20"
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </Button>
+          </PanelFooter>
+        </PanelFrame>
+      </PanelStage>
+    </PanelRoot>
   );
 }

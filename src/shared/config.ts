@@ -1,3 +1,4 @@
+// Allowed overlay anchor points; must match Rust's OverlayCorner enum.
 export const OVERLAY_CORNERS = [
   "top-left",
   "top-right",
@@ -7,6 +8,7 @@ export const OVERLAY_CORNERS = [
 
 export type OverlayCorner = (typeof OVERLAY_CORNERS)[number];
 
+// Persisted overlay settings shared between the UI and Tauri backend.
 export type OverlayConfig = {
   corner: OverlayCorner;
   keybinds: {
@@ -19,6 +21,7 @@ export type OverlayConfig = {
   };
   tools: {
     capture_screen_text_enabled: boolean;
+    agent_enabled: boolean;
   };
 };
 
@@ -39,5 +42,6 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   },
   tools: {
     capture_screen_text_enabled: true,
+    agent_enabled: false,
   },
 };

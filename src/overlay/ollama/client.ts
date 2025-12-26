@@ -16,6 +16,7 @@ export async function ollamaHealthCheck() {
 }
 
 export async function ollamaChat(request: OllamaChatRequest) {
+  // Non-streamed response used by the agent adapter.
   const payload: Record<string, unknown> = {
     model: request.model,
     messages: request.messages,

@@ -17,6 +17,7 @@ pub enum OverlayCorner {
 pub struct OverlayState {
     corner: Mutex<OverlayCorner>,
     last_position: Mutex<Option<PhysicalPosition<i32>>>,
+    is_visible: Mutex<bool>,
 }
 
 impl OverlayState {
@@ -24,6 +25,7 @@ impl OverlayState {
         Self {
             corner: Mutex::new(initial_corner),
             last_position: Mutex::new(None),
+            is_visible: Mutex::new(false),
         }
     }
 
@@ -52,9 +54,23 @@ impl OverlayState {
             *stored = None;
         }
     }
+
+    pub fn is_visible(&self) -> bool {
+        *self
+            .is_visible
+            .lock()
+            .unwrap_or_else(|err| err.into_inner())
+    }
+
+    pub fn set_visible(&self, visible: bool) {
+        if let Ok(mut stored) = self.is_visible.lock() {
+            *stored = visible;
+        }
+    }
 }
 
 pub fn snap_overlay_to_corner(window: &tauri::WebviewWindow, corner: OverlayCorner) {
+    // Snap to the monitor work area so we stay clear of the taskbar/dock.
     let monitor = window
         .current_monitor()
         .ok()
@@ -98,17 +114,20 @@ fn position_overlay_window(window: &tauri::WebviewWindow, state: &OverlayState) 
 }
 
 pub fn toggle_overlay_window(window: &tauri::WebviewWindow, state: &OverlayState) {
-    let visible = window.is_visible().unwrap_or(false);
+    let visible = state.is_visible();
 
     if visible {
         println!("Hiding overlay");
         let _ = window.hide();
+        state.set_visible(false);
     } else {
         println!("Showing overlay");
         let _ = window.show();
+        // Restore the last dragged position, otherwise snap to the corner.
         position_overlay_window(window, state);
         let _ = window.set_focus();
         let _ = window.set_always_on_top(true);
+        state.set_visible(true);
         let _ = window.emit("overlay:shown", ());
     }
 }
@@ -118,6 +137,29 @@ pub fn toggle_overlay(app: tauri::AppHandle, state: State<OverlayState>) {
     if let Some(window) = app.webview_windows().get("overlay") {
         println!("Toggling overlay (command)");
         toggle_overlay_window(window, &state);
+    }
+}
+
+#[tauri::command]
+pub fn set_overlay_visibility(
+    app: tauri::AppHandle,
+    state: State<OverlayState>,
+    visible: bool,
+) {
+    if let Some(window) = app.webview_windows().get("overlay") {
+        if visible {
+            println!("Showing overlay (command)");
+            let _ = window.show();
+            position_overlay_window(window, &state);
+            let _ = window.set_focus();
+            let _ = window.set_always_on_top(true);
+            state.set_visible(true);
+            let _ = window.emit("overlay:shown", ());
+        } else {
+            println!("Hiding overlay (command)");
+            let _ = window.hide();
+            state.set_visible(false);
+        }
     }
 }
 

@@ -1,7 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react";
 import { MessageList } from "./components/MessageList";
+import { ChatControls } from "./components/ChatControls";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
 import { useOverlayHotkeys } from "./hooks/useOverlayHotkeys";
@@ -12,12 +20,17 @@ import { useOllamaHealth } from "./hooks/useOllamaHealth";
 import { OverlayHeader } from "./components/OverlayHeader";
 import { DEFAULT_OVERLAY_CONFIG, type OverlayConfig } from "../shared/config";
 import { useTauriEvent } from "../shared/hooks/useTauriEvent";
+import {
+  PanelFrame,
+  PanelRoot,
+  PanelStage,
+} from "@/components/layout/panel";
+import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
 
 export function Overlay() {
-  useOverlayHotkeys();
-
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
+  const [agentEnabled, setAgentEnabled] = useState(false);
   const [panelOpacity, setPanelOpacity] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity,
   );
@@ -32,9 +45,19 @@ export function Overlay() {
   const {
     isOpen,
     error: ollamaError,
+    isChecking,
     handleDownload,
     handleRetry,
   } = useOllamaHealth();
+  const ollamaConnected = !ollamaError && !isChecking;
+
+  // Keep React state aligned with the persisted config payload.
+  const applyConfig = useCallback((config: OverlayConfig) => {
+    setCaptureToolEnabled(config.tools.capture_screen_text_enabled);
+    setAgentEnabled(config.tools.agent_enabled);
+    setPanelOpacity(config.appearance.panel_opacity);
+    setShowThinking(config.appearance.show_thinking);
+  }, []);
 
   useTauriEvent("overlay:shown", () => {
     inputRef.current?.focus();
@@ -42,9 +65,7 @@ export function Overlay() {
   });
 
   useTauriEvent<OverlayConfig>("config:updated", (event) => {
-    setCaptureToolEnabled(event.payload.tools.capture_screen_text_enabled);
-    setPanelOpacity(event.payload.appearance.panel_opacity);
-    setShowThinking(event.payload.appearance.show_thinking);
+    applyConfig(event.payload);
   });
 
   const applyPanelOpacity = useCallback((value: number) => {
@@ -60,17 +81,11 @@ export function Overlay() {
     invoke<OverlayConfig>("get_overlay_config")
       .then((loaded) => {
         if (!active) return;
-        setCaptureToolEnabled(loaded.tools.capture_screen_text_enabled);
-        setPanelOpacity(loaded.appearance.panel_opacity);
-        setShowThinking(loaded.appearance.show_thinking);
+        applyConfig(loaded);
       })
       .catch(() => {
         if (!active) return;
-        setCaptureToolEnabled(
-          DEFAULT_OVERLAY_CONFIG.tools.capture_screen_text_enabled,
-        );
-        setPanelOpacity(DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity);
-        setShowThinking(DEFAULT_OVERLAY_CONFIG.appearance.show_thinking);
+        applyConfig(DEFAULT_OVERLAY_CONFIG);
       });
 
     return () => {
@@ -88,6 +103,22 @@ export function Overlay() {
       .catch(() => null);
   }, []);
 
+  const isScrollbarInteraction = useCallback(
+    (target: HTMLElement | null, clientX: number) => {
+      if (!target) return false;
+      const scrollContainer = target.closest(
+        "[data-scroll-container]",
+      ) as HTMLElement | null;
+      if (!scrollContainer) return false;
+      const scrollbarWidth =
+        scrollContainer.offsetWidth - scrollContainer.clientWidth;
+      if (scrollbarWidth <= 0) return false;
+      const rect = scrollContainer.getBoundingClientRect();
+      return clientX >= rect.right - scrollbarWidth;
+    },
+    [],
+  );
+
   const handlePanelPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return;
@@ -99,10 +130,13 @@ export function Overlay() {
       ) {
         return;
       }
+      if (isScrollbarInteraction(target, event.clientX)) {
+        return;
+      }
       event.preventDefault();
       startDragging();
     },
-    [startDragging],
+    [isScrollbarInteraction, startDragging],
   );
 
   const requestCaptureConsent = useCallback(
@@ -135,34 +169,46 @@ export function Overlay() {
     sendMessage,
     cancelSend,
     clearHistory,
+    regenerateLastResponse,
+    canRegenerate,
+    toolUsage,
   } = useOllamaChat(DEFAULT_MODEL, {
     toolsEnabled: captureToolEnabled,
+    agentEnabled,
     requestScreenCapture: requestCaptureConsent,
     setCaptureInProgress: setIsCapturing,
     beforeCapture: async () => {
       // Hide the overlay so the OCR doesn't capture itself.
-      const window = getCurrentWindow();
       await new Promise((resolve) => setTimeout(resolve, 150));
-      await window.hide();
+      await invoke("set_overlay_visibility", { visible: false });
       await new Promise((resolve) => setTimeout(resolve, 150));
     },
     afterCapture: async () => {
       const window = getCurrentWindow();
-      await window.show();
+      await invoke("set_overlay_visibility", { visible: true });
       await window.setFocus();
     },
   });
+  const inputHistory = useMemo(
+    () =>
+      messages
+        .filter((message) => message.role === "user")
+        .map((message) => message.content ?? ""),
+    [messages],
+  );
+
+  useOverlayHotkeys({
+    onStop: cancelSend,
+    onRegenerate: regenerateLastResponse,
+  });
   return (
     <>
-      <div className="overlay-root fixed inset-0 pointer-events-none">
-        {isCapturing && (
-          <div className="fixed top-3 left-1/2 -translate-x-1/2 rounded-full bg-white/80 px-4 py-1 text-xs font-semibold text-black">
-            Capturing active window...
-          </div>
-        )}
-        <div className="absolute inset-0 flex justify-center">
-          <div
-            className="w-full max-w-2xl h-full flex flex-col pointer-events-auto overlay-panel"
+      <PanelRoot variant="overlay">
+        {isCapturing && <OverlayCaptureNotice />}
+        <PanelStage>
+          <PanelFrame
+            variant="overlay"
+            className="overlay-panel"
             onPointerDown={handlePanelPointerDown}
           >
             <OverlayHeader
@@ -176,6 +222,7 @@ export function Overlay() {
               messages={messages}
               isSending={isSending}
               showThinking={showThinking}
+              ollamaConnected={ollamaConnected}
             />
 
             {/* Error */}
@@ -191,10 +238,17 @@ export function Overlay() {
               onSend={sendMessage}
               onCancel={cancelSend}
               inputRef={inputRef}
+              history={inputHistory}
             />
-          </div>
-        </div>
-      </div>
+            <ChatControls
+              isSending={isSending}
+              canRegenerate={canRegenerate}
+              onRegenerate={regenerateLastResponse}
+              toolUsage={toolUsage}
+            />
+          </PanelFrame>
+        </PanelStage>
+      </PanelRoot>
       <CaptureConsentModal
         isOpen={consentOpen}
         onApprove={handleApprove}

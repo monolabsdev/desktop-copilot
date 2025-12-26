@@ -3,6 +3,7 @@
 
 mod capture;
 mod config;
+mod files;
 mod ollama;
 mod overlay;
 mod shortcuts;
@@ -20,6 +21,7 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             let config = config::load_overlay_config(&handle);
+            // Keep overlay state in memory for snapping and restoring position.
             app.manage(overlay::OverlayState::new(config.corner));
             config::save_overlay_config(&handle, &config);
 
@@ -38,7 +40,7 @@ fn main() {
             // Run a background health check so the UI can prompt if Ollama is missing.
             tauri::async_runtime::spawn(ollama::emit_health_if_needed(app.handle().clone()));
 
-            // create a tray icon.
+            // Create the tray icon and menu shortcuts.
             let preferences_i =
                 MenuItem::with_id(app, "preferences", "Preferences", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -64,7 +66,7 @@ fn main() {
                         .title("Preferences")
                         .inner_size(420.0, 520.0)
                         .resizable(false)
-                        .transparent(true)
+                        .transparent(false)
                         .decorations(true)
                         .build();
                     }
@@ -78,6 +80,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             overlay::toggle_overlay,
+            overlay::set_overlay_visibility,
             overlay::set_overlay_corner,
             overlay::get_overlay_corner,
             config::get_capture_tool_enabled,
@@ -85,9 +88,10 @@ fn main() {
             config::get_overlay_config,
             config::set_overlay_config,
             capture::capture_screen_text,
+            files::read_file,
             ollama::ollama_health_check,
             ollama::ollama_chat,
-            ollama::ollama_chat_stream
+            ollama::ollama_chat_stream,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

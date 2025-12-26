@@ -15,7 +15,7 @@ pub fn register_overlay_shortcut(app: &tauri::AppHandle, config: &OverlayConfig)
         .global_shortcut()
         .unregister(config.keybinds.focus_overlay.as_str());
 
-    // Debounce state
+    // Debounce state to avoid repeat key events.
     let last_trigger = Arc::new(Mutex::new(Instant::now() - Duration::from_secs(1)));
     let debounce = Duration::from_millis(200);
     let last_trigger_clone = last_trigger.clone();
@@ -52,13 +52,15 @@ pub fn register_overlay_shortcut(app: &tauri::AppHandle, config: &OverlayConfig)
             }
             if let Some(window) = app.webview_windows().get("overlay") {
                 let state = app.state::<OverlayState>();
-                if !window.is_visible().unwrap_or(false) {
+                // Show and focus without toggling visibility off if already open.
+                if !state.is_visible() {
                     let _ = window.show();
                     if let Some(position) = state.last_position() {
                         let _ = window.set_position(tauri::Position::Physical(position));
                     } else {
                         snap_overlay_to_corner(window, state.current_corner());
                     }
+                    state.set_visible(true);
                 }
                 let _ = window.set_focus();
                 let _ = window.set_always_on_top(true);
