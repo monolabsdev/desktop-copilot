@@ -24,15 +24,18 @@ export async function handleChatCommand(
       return { handled: true, error: result.error };
     }
 
-    const messages: Message[] = [
-      { role: "user", content: parsed.raw },
-      { role: "assistant", content: result.reply },
-    ];
+    const messages: Message[] | undefined = result.reply
+      ? [
+          { role: "user", content: parsed.raw },
+          { role: "assistant", content: result.reply },
+        ]
+      : undefined;
 
     return {
       handled: true,
       messages,
       clearInput: result.clearInput ?? true,
+      clearHistory: result.clearHistory ?? false,
     };
   } catch (err) {
     return {

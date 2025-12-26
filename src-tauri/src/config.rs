@@ -19,6 +19,8 @@ pub struct KeybindConfig {
 pub struct ToolConfig {
     #[serde(default = "default_capture_tool_enabled")]
     pub capture_screen_text_enabled: bool,
+    #[serde(default = "default_agent_enabled")]
+    pub agent_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,10 +43,15 @@ fn default_show_thinking() -> bool {
     true
 }
 
+fn default_agent_enabled() -> bool {
+    false
+}
+
 impl Default for ToolConfig {
     fn default() -> Self {
         Self {
             capture_screen_text_enabled: true,
+            agent_enabled: default_agent_enabled(),
         }
     }
 }
@@ -94,6 +101,7 @@ impl Default for OverlayConfig {
     }
 }
 
+// App config path is platform-specific (e.g., %APPDATA% on Windows).
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
     app.path()
         .app_config_dir()
@@ -161,6 +169,7 @@ pub fn set_overlay_config(
     state: State<OverlayState>,
     config: OverlayConfig,
 ) -> Result<(), String> {
+    // Persist settings and notify the UI for live updates.
     save_overlay_config(&app, &config);
     state.set_corner(config.corner);
     if let Some(window) = app.webview_windows().get("overlay") {

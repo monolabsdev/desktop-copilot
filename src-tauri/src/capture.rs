@@ -26,6 +26,7 @@ pub async fn capture_screen_text(app: AppHandle) -> Result<CaptureResult, String
 
 #[cfg(target_os = "windows")]
 async fn capture_screen_text_impl(app: AppHandle) -> Result<CaptureResult, String> {
+    // Enforce the user-configurable safety switch before any capture work.
     if !config::capture_tool_enabled(&app) {
         return Err("Screen capture tool disabled in settings.".into());
     }
@@ -83,6 +84,7 @@ async fn capture_text(x: i32, y: i32, width: u32, height: u32) -> Result<String,
         ));
     }
 
+    // Read raw pixels and pass them through Windows OCR.
     let bgra = capture_bgra(x, y, width, height)?;
     let writer = DataWriter::new().map_err(|err| format!("Buffer init failed: {err}"))?;
     writer

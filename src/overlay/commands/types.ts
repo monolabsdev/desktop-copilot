@@ -5,7 +5,12 @@ export type CommandContext = {
 };
 
 export type CommandExecution =
-  | { status: "success"; reply: string; clearInput?: boolean }
+  | {
+      status: "success";
+      reply?: string;
+      clearInput?: boolean;
+      clearHistory?: boolean;
+    }
   | { status: "error"; error: string };
 
 export type CommandHandler = {
@@ -27,4 +32,5 @@ export type CommandHandlingResult =
       error?: string;
       messages?: Message[];
       clearInput?: boolean;
+      clearHistory?: boolean;
     };

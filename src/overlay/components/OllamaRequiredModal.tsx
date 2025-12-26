@@ -1,5 +1,5 @@
-import { Button } from "@heroui/react";
-import { ModalShell } from "../../shared/ui/ModalShell";
+import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/shared/ui/ModalShell";
 
 interface Props {
   isOpen: boolean;
@@ -24,14 +24,14 @@ export function OllamaRequiredModal({
           <Button
             size="sm"
             className="bg-white/10 text-white/80"
-            onPress={onRetry}
+            onClick={onRetry}
           >
             Retry
           </Button>
           <Button
             size="sm"
             className="bg-white text-black hover:bg-white/90"
-            onPress={onDownload}
+            onClick={onDownload}
           >
             Download Ollama
           </Button>
