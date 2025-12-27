@@ -1,6 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useMemo, type ComponentPropsWithoutRef } from "react";
+import { memo, useMemo, type ComponentPropsWithoutRef } from "react";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { Loader } from "@/components/ui/loader";
 import type { Message } from "ollama";
@@ -10,6 +10,7 @@ import { Disclosure } from "@/components/ui/disclosure";
 type MessageWithImages = Message & {
   thinking?: string;
   thinkingDurationMs?: number;
+  toolActivity?: string;
   imageMime?: string;
   imagePath?: string;
   imagePreviewBase64?: string;
@@ -90,7 +91,8 @@ const markdownComponents = {
     <img
       src={src}
       alt={alt ?? ""}
-      loading="lazy"
+      loading="eager"
+      decoding="async"
       data-no-drag
       className="mt-2 w-full rounded-md border border-white/10"
     />
@@ -116,7 +118,7 @@ function formatDuration(ms: number) {
   return `${minutes}m ${remainder}s`;
 }
 
-export function MessageBubble({ message, showThinking }: Props) {
+function MessageBubbleComponent({ message, showThinking }: Props) {
   const isUser = message.role === "user";
   const label = isUser ? "You" : "AI";
   const thinking =
@@ -174,7 +176,7 @@ export function MessageBubble({ message, showThinking }: Props) {
       {showThinkingRow && (
         <Disclosure
           trigger={
-            isStreaming ? (
+            isStreaming && !thinkingDurationLabel ? (
               <TextShimmer
                 className="font-mono text-sm [--base-color:#cbd5f5] [--base-gradient-color:#ffffff]"
                 duration={1}
@@ -228,7 +230,8 @@ export function MessageBubble({ message, showThinking }: Props) {
                   <img
                     src={`data:${imagePreviewMime};base64,${imagePreviewBase64}`}
                     alt="Screenshot"
-                    loading="lazy"
+                    loading="eager"
+                    decoding="async"
                     data-no-drag
                     className="w-full rounded-md border border-white/10"
                   />
@@ -237,7 +240,8 @@ export function MessageBubble({ message, showThinking }: Props) {
                   <img
                     src={imageUrl}
                     alt="Screenshot"
-                    loading="lazy"
+                    loading="eager"
+                    decoding="async"
                     data-no-drag
                     className="w-full rounded-md border border-white/10"
                   />
@@ -249,7 +253,8 @@ export function MessageBubble({ message, showThinking }: Props) {
                       key={`${label}-image-${index}`}
                       src={`data:${imageMime};base64,${image}`}
                       alt="Screenshot"
-                      loading="lazy"
+                      loading="eager"
+                      decoding="async"
                       data-no-drag
                       className="w-full rounded-md border border-white/10"
                     />
@@ -271,3 +276,9 @@ export function MessageBubble({ message, showThinking }: Props) {
     </div>
   );
 }
+
+export const MessageBubble = memo(
+  MessageBubbleComponent,
+  (prev, next) =>
+    prev.message === next.message && prev.showThinking === next.showThinking,
+);

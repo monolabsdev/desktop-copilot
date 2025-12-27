@@ -108,10 +108,12 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       const withImages = message as Message & { images?: string[] };
       const nextContent =
         typeof withImages.content === "string"
-          ? withImages.content.replace(
-              /!\[[^\]]*]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/g,
-              "",
-            ).trim()
+          ? withImages.content
+              .replace(
+                /!\[[^\]]*]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/g,
+                "",
+              )
+              .trim()
           : withImages.content;
       if (!withImages.images || withImages.images.length === 0) {
         return nextContent === withImages.content
@@ -199,7 +201,6 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   ) {
     const trimmed = content.trim();
     if (!trimmed || isSending) return;
-    const requestStartedAt = Date.now();
 
     setToolUsage((prev: ToolUsage) => ({
       ...prev,
@@ -221,7 +222,10 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
 
     try {
       const baseMessages = buildBaseMessages(false);
-      const result = await streamChat(baseMessages, requestId, requestStartedAt);
+      const result = await streamChat(
+        baseMessages,
+        requestId,
+      );
       if (!result || requestId !== requestIdRef.current) return;
 
       if (result.toolCalls && result.toolCalls.length > 0) {

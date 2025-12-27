@@ -15,6 +15,7 @@ import type { Message } from "ollama";
 import { DEFAULT_MODEL, VISION_MODEL } from "../constants";
 import { ollamaChat } from "../ollama/client";
 import type { ChatMessage, ToolOptions, ToolUsage } from "./ollama/types";
+import { toErrorMessage } from "./ollama/utils";
 
 type UseAgentsSdkOptions = ToolOptions & {
   model?: string;
@@ -44,7 +45,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
   const requestIdRef = useRef(0);
   const streamMessageIdRef = useRef(0);
   const historyRef = useRef<AgentInputItem[]>([]);
-  const toolActivityRef = useRef<string | null>(null);
+  const toolActivityRef = useRef<string | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
   const runnerRef = useRef<Runner | null>(null);
   const agentRef = useRef<Agent | null>(null);
@@ -107,29 +108,13 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
           const response =
             toolResponse &&
             typeof toolResponse === "object" &&
-            "image_base64" in toolResponse
+            "file_path" in toolResponse
               ? (toolResponse as {
-                  image_base64?: string;
-                  preview_base64?: string;
-                  preview_mime?: string;
                   file_path?: string;
                   app_name?: string | null;
                 })
               : null;
-          if (response?.image_base64) {
-            const label = response.app_name
-              ? `Screenshot from ${response.app_name}.`
-              : "Screenshot attached.";
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "user",
-                content: label,
-                imagePath: response.file_path,
-                imagePreviewBase64: response.preview_base64,
-                imagePreviewMime: response.preview_mime ?? "image/png",
-              },
-            ]);
+          if (response?.file_path) {
             const visionResponse = await ollamaChat({
               model: nextConfig.visionModel,
               messages: [
@@ -137,7 +122,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
                   role: "user",
                   content:
                     "Summarize the screenshot with details relevant to the user's request.",
-                  images: [response.image_base64],
+                  images: [response.file_path],
                 } as Message,
               ],
             });
@@ -183,13 +168,13 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     abortControllerRef.current = null;
     setIsSending(false);
     setError(null);
-    toolActivityRef.current = null;
+    toolActivityRef.current = undefined;
   };
 
   const clearHistory = () => {
     setMessages([]);
     historyRef.current = [];
-    toolActivityRef.current = null;
+    toolActivityRef.current = undefined;
   };
 
   const regenerateLastResponse = async () => {
@@ -283,7 +268,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
       await result.completed;
       if (requestId !== requestIdRef.current) return;
       const toolActivity = toolActivityRef.current;
-      toolActivityRef.current = null;
+      toolActivityRef.current = undefined;
       setMessages((prev) =>
         prev.map((message) =>
           message.streamId === streamId
@@ -294,7 +279,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
       appendHistory([assistant(contentSoFar)]);
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
-      setError(err instanceof Error ? err.message : "Ollama unreachable.");
+      setError(toErrorMessage(err, "Ollama unreachable."));
     } finally {
       if (requestId === requestIdRef.current) {
         setIsSending(false);

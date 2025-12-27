@@ -12,7 +12,6 @@ type InvokeFn = (
 type StreamChat = (
   baseMessages: Message[],
   requestId: number,
-  requestStartedAt: number,
   modelOverride?: string,
 ) => Promise<StreamResult | null>;
 
@@ -53,7 +52,6 @@ export function createToolHandler({
     toolCalls: NonNullable<Message["tool_calls"]>,
     toolMessage: Message,
     extraMessages: Message[] = [],
-    requestStartedAt: number,
   ) => {
     const followupMessages: Message[] = [
       ...baseMessages,
@@ -83,7 +81,6 @@ export function createToolHandler({
     const result = await streamChat(
       normalizedMessages,
       requestId,
-      requestStartedAt,
       modelOverride,
     );
     if (!result || requestId !== requestIdRef.current) return;
@@ -129,7 +126,6 @@ export function createToolHandler({
           toolCalls,
           toolMessage,
           [],
-          Date.now(),
         );
         return true;
       }
@@ -150,7 +146,6 @@ export function createToolHandler({
           toolCalls,
           toolMessage,
           [],
-          Date.now(),
         );
         return true;
       }
@@ -170,18 +165,15 @@ export function createToolHandler({
       const response =
         toolResponse &&
         typeof toolResponse === "object" &&
-        "image_base64" in toolResponse
-        ? (toolResponse as {
-            image_base64?: string;
-            mime_type?: string;
-            file_path?: string;
-            preview_base64?: string;
-            preview_mime?: string;
-            source?: string;
-            app_name?: string | null;
-            resolution?: {
-              width: number;
-              height: number;
+        "file_path" in toolResponse
+          ? (toolResponse as {
+              mime_type?: string;
+              file_path?: string;
+              source?: string;
+              app_name?: string | null;
+              resolution?: {
+                width: number;
+                height: number;
                 scale_factor: number;
               };
             })
@@ -195,7 +187,7 @@ export function createToolHandler({
       });
 
       const extraMessages: Message[] = [];
-      if (response?.image_base64) {
+      if (response?.file_path) {
         const label = response.app_name
           ? `Screenshot from ${response.app_name}.`
           : "Screenshot attached.";
@@ -203,17 +195,9 @@ export function createToolHandler({
           role: "user",
           content:
             `${label} Use the image to answer the user's last request. ` +
-            "Respond in markdown. Include the screenshot when helpful.",
-          images: [response.image_base64],
+            "Respond in markdown. Do not include the screenshot in the response.",
+          images: [response.file_path],
         } as Message);
-        options?.onLocalMessage?.({
-          role: "user",
-          content: label,
-          imagePath: response.file_path,
-          imageMime: response.mime_type ?? "image/png",
-          imagePreviewBase64: response.preview_base64,
-          imagePreviewMime: response.preview_mime ?? "image/png",
-        });
       }
 
       appendHistory([
@@ -227,7 +211,6 @@ export function createToolHandler({
         toolCalls,
         toolMessage,
         extraMessages,
-        Date.now(),
       );
       return true;
     } finally {

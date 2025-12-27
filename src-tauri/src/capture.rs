@@ -1,4 +1,3 @@
-use base64::Engine;
 use image::{DynamicImage, ImageFormat};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -16,10 +15,7 @@ pub struct CaptureResolution {
 
 #[derive(Debug, Serialize)]
 pub struct CaptureResult {
-    pub image_base64: String,
-    pub preview_base64: String,
     pub mime_type: &'static str,
-    pub preview_mime: &'static str,
     pub file_path: String,
     pub source: &'static str,
     pub app_name: Option<String>,
@@ -27,7 +23,6 @@ pub struct CaptureResult {
 }
 
 const MAX_IMAGE_DIM: u32 = 1280;
-const PREVIEW_MAX_DIM: u32 = 512;
 const MAX_CAPTURE_FILES: usize = 10;
 
 #[tauri::command]
@@ -54,16 +49,8 @@ async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, Stri
 
     let png_bytes = capture_png(x, y, width, height)?;
     let file_path = save_capture(&app, &png_bytes)?;
-    let image_base64 =
-        base64::engine::general_purpose::STANDARD.encode(&png_bytes.bytes);
-    let preview_base64 =
-        base64::engine::general_purpose::STANDARD.encode(&png_bytes.preview_bytes);
-
     Ok(CaptureResult {
-        image_base64,
         mime_type: "image/png",
-        preview_base64,
-        preview_mime: "image/png",
         file_path: file_path.to_string_lossy().to_string(),
         source: "window",
         app_name: title,
@@ -83,16 +70,8 @@ async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, Stri
 
     let png_bytes = capture_screen_png()?;
     let file_path = save_capture(&app, &png_bytes)?;
-    let image_base64 =
-        base64::engine::general_purpose::STANDARD.encode(&png_bytes.bytes);
-    let preview_base64 =
-        base64::engine::general_purpose::STANDARD.encode(&png_bytes.preview_bytes);
-
     Ok(CaptureResult {
-        image_base64,
         mime_type: "image/png",
-        preview_base64,
-        preview_mime: "image/png",
         file_path: file_path.to_string_lossy().to_string(),
         source: "screen",
         app_name: None,
@@ -111,7 +90,6 @@ async fn capture_screen_image_impl(_app: AppHandle) -> Result<CaptureResult, Str
 
 struct EncodedPng {
     bytes: Vec<u8>,
-    preview_bytes: Vec<u8>,
     width: u32,
     height: u32,
     scale_factor: f64,
@@ -132,11 +110,8 @@ fn capture_png(x: i32, y: i32, width: u32, height: u32) -> Result<EncodedPng, St
     let image = DynamicImage::ImageRgba8(image);
     let (resized, scale_factor) = downscale_image(image);
     let bytes = encode_png(&resized)?;
-    let preview = resize_for_preview(&resized);
-    let preview_bytes = encode_png(&preview)?;
     Ok(EncodedPng {
         bytes,
-        preview_bytes,
         width: resized.width(),
         height: resized.height(),
         scale_factor,
@@ -263,11 +238,8 @@ fn capture_screen_png() -> Result<EncodedPng, String> {
         image::load_from_memory(&bytes).map_err(|err| format!("PNG load failed: {err}"))?;
     let (resized, scale_factor) = downscale_image(image);
     let bytes = encode_png(&resized)?;
-    let preview = resize_for_preview(&resized);
-    let preview_bytes = encode_png(&preview)?;
     Ok(EncodedPng {
         bytes,
-        preview_bytes,
         width: resized.width(),
         height: resized.height(),
         scale_factor,
@@ -286,19 +258,6 @@ fn downscale_image(image: DynamicImage) -> (DynamicImage, f64) {
     let target_height = (height as f64 * scale).round().max(1.0) as u32;
     let resized = image.resize(target_width, target_height, image::imageops::FilterType::Triangle);
     (resized, scale)
-}
-
-fn resize_for_preview(image: &DynamicImage) -> DynamicImage {
-    let width = image.width();
-    let height = image.height();
-    let max_dim = width.max(height);
-    if max_dim <= PREVIEW_MAX_DIM {
-        return image.clone();
-    }
-    let scale = PREVIEW_MAX_DIM as f64 / max_dim as f64;
-    let target_width = (width as f64 * scale).round().max(1.0) as u32;
-    let target_height = (height as f64 * scale).round().max(1.0) as u32;
-    image.resize(target_width, target_height, image::imageops::FilterType::Triangle)
 }
 
 fn encode_png(image: &DynamicImage) -> Result<Vec<u8>, String> {

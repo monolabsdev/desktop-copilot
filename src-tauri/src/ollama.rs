@@ -1,6 +1,8 @@
+use base64::Engine;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::path::Path;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
@@ -29,6 +31,50 @@ fn describe_reqwest_error(err: &reqwest::Error) -> String {
         return "connection refused by Ollama".to_string();
     }
     format!("request error: {err}")
+}
+
+fn encode_image_path(raw: &str) -> Result<Option<String>, String> {
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    let mut normalized = trimmed;
+    if let Some(stripped) = trimmed.strip_prefix("file://") {
+        normalized = stripped;
+    }
+    let normalized = normalized.replace("%20", " ");
+    let path = Path::new(&normalized);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path)
+        .map_err(|err| format!("Failed to read image file '{normalized}': {err}"))?;
+    Ok(Some(
+        base64::engine::general_purpose::STANDARD.encode(bytes),
+    ))
+}
+
+fn normalize_image_paths(payload: &mut Value) -> Result<(), String> {
+    let Some(messages) = payload.get_mut("messages").and_then(Value::as_array_mut) else {
+        return Ok(());
+    };
+    for message in messages.iter_mut() {
+        let Some(images) = message.get_mut("images").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        for image in images.iter_mut() {
+            let Some(raw) = image.as_str() else {
+                continue;
+            };
+            if let Some(encoded) = encode_image_path(raw)? {
+                *image = Value::String(encoded);
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn check_ollama_health() -> Result<(), String> {
@@ -71,6 +117,7 @@ pub async fn ollama_health_check() -> Result<(), String> {
 pub async fn ollama_chat(request: Value) -> Result<Value, String> {
     let client = build_client()?;
     let mut payload = request;
+    normalize_image_paths(&mut payload)?;
     let Some(obj) = payload.as_object_mut() else {
         return Err("Invalid request payload.".to_string());
     };
@@ -118,6 +165,7 @@ pub async fn ollama_chat_stream(
 ) -> Result<(), String> {
     let client = build_client()?;
     let mut payload = request;
+    normalize_image_paths(&mut payload)?;
     let Some(obj) = payload.as_object_mut() else {
         return Err("Invalid request payload.".to_string());
     };

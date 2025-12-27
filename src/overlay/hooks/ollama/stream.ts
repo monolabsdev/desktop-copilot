@@ -26,7 +26,6 @@ type StreamBindings = {
 type StreamArgs = StreamBindings & {
   baseMessages: Message[];
   requestId: number;
-  requestStartedAt: number;
   modelOverride?: string;
 };
 
@@ -34,14 +33,12 @@ export function createStreamChat(bindings: StreamBindings) {
   return (
     baseMessages: Message[],
     requestId: number,
-    requestStartedAt: number,
     modelOverride?: string,
   ) =>
     streamOllamaChat({
       ...bindings,
       baseMessages,
       requestId,
-      requestStartedAt,
       modelOverride,
     });
 }
@@ -49,7 +46,6 @@ export function createStreamChat(bindings: StreamBindings) {
 async function streamOllamaChat({
   baseMessages,
   requestId,
-  requestStartedAt,
   model,
   toolConfig,
   requestIdRef,
@@ -67,8 +63,10 @@ async function streamOllamaChat({
   let finished = false;
   let latestMessage: AssistantPayload | null = null;
 
-  // === Thinking latency (THIS is the number you want) ===
-  let thinkingLatencyMs: number | undefined;
+  let thinkingDurationMs: number | undefined;
+  let reasoningStartedAt: number | undefined;
+  let reasoningLastAt: number | undefined;
+  let reasoningEndedAt: number | undefined;
 
   // === Optional streamed thinking text ===
   let streamedReasoning: string | undefined;
@@ -91,10 +89,19 @@ async function streamOllamaChat({
     const streamingThinking = normalizeThinkingValue(
       streamedReasoning ?? streamedThinking ?? streamedThoughts,
     );
+    const streamingDurationMs =
+      reasoningStartedAt && reasoningEndedAt
+        ? Math.max(0, reasoningEndedAt - reasoningStartedAt)
+        : undefined;
     setMessages((prev) =>
       prev.map((message) =>
         message.streamId === streamedMessageId
-          ? { ...message, content, thinking: streamingThinking }
+          ? {
+              ...message,
+              content,
+              thinking: streamingThinking,
+              thinkingDurationMs: streamingDurationMs,
+            }
           : message,
       ),
     );
@@ -128,11 +135,6 @@ async function streamOllamaChat({
       const payload = event.payload;
       if (payload.stream_id !== streamId) return;
 
-      // 🔒 LOCK THINKING TIME ON FIRST ASSISTANT SIGNAL
-      if (thinkingLatencyMs === undefined) {
-        thinkingLatencyMs = Date.now() - requestStartedAt;
-      }
-
       if (payload.error) {
         finished = true;
         cleanup();
@@ -149,6 +151,9 @@ async function streamOllamaChat({
         latestMessage = message;
 
         if (typeof message.reasoning === "string" && message.reasoning) {
+          const now = Date.now();
+          reasoningStartedAt = reasoningStartedAt ?? now;
+          reasoningLastAt = now;
           streamedReasoning = mergeStreamText(
             streamedReasoning,
             message.reasoning,
@@ -156,6 +161,9 @@ async function streamOllamaChat({
         }
 
         if (typeof message.thinking === "string" && message.thinking) {
+          const now = Date.now();
+          reasoningStartedAt = reasoningStartedAt ?? now;
+          reasoningLastAt = now;
           streamedThinking = mergeStreamText(
             streamedThinking,
             message.thinking,
@@ -163,6 +171,9 @@ async function streamOllamaChat({
         }
 
         if (typeof message.thoughts === "string" && message.thoughts) {
+          const now = Date.now();
+          reasoningStartedAt = reasoningStartedAt ?? now;
+          reasoningLastAt = now;
           streamedThoughts = mergeStreamText(
             streamedThoughts,
             message.thoughts,
@@ -181,6 +192,9 @@ async function streamOllamaChat({
       const delta = typeof message?.content === "string" ? message.content : "";
 
       if (delta) {
+        if (reasoningStartedAt && !reasoningEndedAt) {
+          reasoningEndedAt = Date.now();
+        }
         content += delta;
         ensureStreamingMessage();
         updateStreamingMessage();
@@ -215,10 +229,14 @@ async function streamOllamaChat({
           assistantMessage.thoughts = normalizedThoughts;
         }
 
+        if (reasoningStartedAt) {
+          const endAt = reasoningEndedAt ?? reasoningLastAt ?? Date.now();
+          thinkingDurationMs = Math.max(0, endAt - reasoningStartedAt);
+        }
         resolve({
           assistantMessage,
           streamMessageId: streamedMessageId ?? undefined,
-          thinkingDurationMs: thinkingLatencyMs,
+          thinkingDurationMs,
         });
       }
     };

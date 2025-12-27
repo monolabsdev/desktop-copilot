@@ -1,6 +1,6 @@
 import type { Message } from "ollama";
 
-import type { AssistantPayload } from "./types";
+import type { AssistantPayload, ChatMessage } from "./types";
 
 const THINKING_TAGS = [
   /<think>([\s\S]*?)<\/think>/gi,
@@ -77,8 +77,11 @@ export function normalizeAssistantMessage(
   const historyMessage: Message = { role: "assistant", content };
   if (!content.trim() && !thinking) throw new Error("No response from Ollama.");
 
-  return {
-    historyMessage,
-    displayMessage: { ...historyMessage, thinking, thinkingDurationMs },
+  const displayMessage: ChatMessage = {
+    ...historyMessage,
+    thinking,
+    thinkingDurationMs,
   };
+
+  return { historyMessage, displayMessage };
 }
