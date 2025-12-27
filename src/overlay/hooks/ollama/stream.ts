@@ -27,6 +27,7 @@ type StreamArgs = StreamBindings & {
   baseMessages: Message[];
   requestId: number;
   requestStartedAt: number;
+  modelOverride?: string;
 };
 
 export function createStreamChat(bindings: StreamBindings) {
@@ -34,12 +35,14 @@ export function createStreamChat(bindings: StreamBindings) {
     baseMessages: Message[],
     requestId: number,
     requestStartedAt: number,
+    modelOverride?: string,
   ) =>
     streamOllamaChat({
       ...bindings,
       baseMessages,
       requestId,
       requestStartedAt,
+      modelOverride,
     });
 }
 
@@ -52,7 +55,9 @@ async function streamOllamaChat({
   requestIdRef,
   streamMessageIdRef,
   setMessages,
+  modelOverride,
 }: StreamArgs): Promise<StreamResult | null> {
+  const resolvedModel = modelOverride ?? model;
   const streamId = `stream-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2)}`;
@@ -223,7 +228,7 @@ async function streamOllamaChat({
         unlisten = unsubscribe;
         return ollamaChatStream(
           {
-            model,
+            model: resolvedModel,
             messages: baseMessages,
             tools: toolConfig,
           },

@@ -1,5 +1,8 @@
+use base64::Engine;
+use image::{DynamicImage, ImageFormat};
 use serde::Serialize;
-use tauri::AppHandle;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
 
 #[cfg(target_os = "windows")]
 use crate::config;
@@ -13,19 +16,27 @@ pub struct CaptureResolution {
 
 #[derive(Debug, Serialize)]
 pub struct CaptureResult {
-    pub text: String,
+    pub image_base64: String,
+    pub preview_base64: String,
+    pub mime_type: &'static str,
+    pub preview_mime: &'static str,
+    pub file_path: String,
     pub source: &'static str,
     pub app_name: Option<String>,
     pub resolution: CaptureResolution,
 }
 
+const MAX_IMAGE_DIM: u32 = 1280;
+const PREVIEW_MAX_DIM: u32 = 512;
+const MAX_CAPTURE_FILES: usize = 10;
+
 #[tauri::command]
-pub async fn capture_screen_text(app: AppHandle) -> Result<CaptureResult, String> {
-    capture_screen_text_impl(app).await
+pub async fn capture_screen_image(app: AppHandle) -> Result<CaptureResult, String> {
+    capture_screen_image_impl(app).await
 }
 
 #[cfg(target_os = "windows")]
-async fn capture_screen_text_impl(app: AppHandle) -> Result<CaptureResult, String> {
+async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, String> {
     // Enforce the user-configurable safety switch before any capture work.
     if !config::capture_tool_enabled(&app) {
         return Err("Screen capture tool disabled in settings.".into());
@@ -41,80 +52,95 @@ async fn capture_screen_text_impl(app: AppHandle) -> Result<CaptureResult, Strin
         return Err("Capture region is empty.".into());
     }
 
-    let text = capture_text(x, y, width, height).await?;
+    let png_bytes = capture_png(x, y, width, height)?;
+    let file_path = save_capture(&app, &png_bytes)?;
+    let image_base64 =
+        base64::engine::general_purpose::STANDARD.encode(&png_bytes.bytes);
+    let preview_base64 =
+        base64::engine::general_purpose::STANDARD.encode(&png_bytes.preview_bytes);
 
     Ok(CaptureResult {
-        text,
+        image_base64,
+        mime_type: "image/png",
+        preview_base64,
+        preview_mime: "image/png",
+        file_path: file_path.to_string_lossy().to_string(),
         source: "window",
         app_name: title,
         resolution: CaptureResolution {
-            width,
-            height,
-            scale_factor: 1.0,
+            width: png_bytes.width,
+            height: png_bytes.height,
+            scale_factor: png_bytes.scale_factor,
         },
     })
 }
 
-#[cfg(not(target_os = "windows"))]
-async fn capture_screen_text_impl(_app: AppHandle) -> Result<CaptureResult, String> {
+#[cfg(target_os = "macos")]
+async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, String> {
+    if !crate::config::capture_tool_enabled(&app) {
+        return Err("Screen capture tool disabled in settings.".into());
+    }
+
+    let png_bytes = capture_screen_png()?;
+    let file_path = save_capture(&app, &png_bytes)?;
+    let image_base64 =
+        base64::engine::general_purpose::STANDARD.encode(&png_bytes.bytes);
+    let preview_base64 =
+        base64::engine::general_purpose::STANDARD.encode(&png_bytes.preview_bytes);
+
+    Ok(CaptureResult {
+        image_base64,
+        mime_type: "image/png",
+        preview_base64,
+        preview_mime: "image/png",
+        file_path: file_path.to_string_lossy().to_string(),
+        source: "screen",
+        app_name: None,
+        resolution: CaptureResolution {
+            width: png_bytes.width,
+            height: png_bytes.height,
+            scale_factor: png_bytes.scale_factor,
+        },
+    })
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+async fn capture_screen_image_impl(_app: AppHandle) -> Result<CaptureResult, String> {
     Err("Screen capture is not implemented for this OS yet.".into())
 }
 
+struct EncodedPng {
+    bytes: Vec<u8>,
+    preview_bytes: Vec<u8>,
+    width: u32,
+    height: u32,
+    scale_factor: f64,
+}
+
 #[cfg(target_os = "windows")]
-async fn capture_text(x: i32, y: i32, width: u32, height: u32) -> Result<String, String> {
-    use windows::Graphics::Imaging::{BitmapPixelFormat, SoftwareBitmap};
-    use windows::Media::Ocr::OcrEngine;
-    use windows::Storage::Streams::DataWriter;
-    use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
-    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
-
-    unsafe {
-        if let Err(err) = RoInitialize(RO_INIT_MULTITHREADED) {
-            if err.code() != RPC_E_CHANGED_MODE {
-                return Err(format!("OCR init failed: {err}"));
-            }
-        }
-    }
-
-    let max_dim =
-        OcrEngine::MaxImageDimension().map_err(|err| format!("OCR unavailable: {err}"))?;
-    if width > max_dim || height > max_dim {
-        return Err(format!(
-            "Capture too large for OCR. Max dimension is {max_dim}px."
-        ));
-    }
-
-    // Read raw pixels and pass them through Windows OCR.
+fn capture_png(x: i32, y: i32, width: u32, height: u32) -> Result<EncodedPng, String> {
     let bgra = capture_bgra(x, y, width, height)?;
-    let writer = DataWriter::new().map_err(|err| format!("Buffer init failed: {err}"))?;
-    writer
-        .WriteBytes(&bgra)
-        .map_err(|err| format!("Buffer write failed: {err}"))?;
-    let buffer = writer
-        .DetachBuffer()
-        .map_err(|err| format!("Buffer finalize failed: {err}"))?;
-
-    let bitmap = SoftwareBitmap::CreateCopyFromBuffer(
-        &buffer,
-        BitmapPixelFormat::Bgra8,
-        width as i32,
-        height as i32,
-    )
-    .map_err(|err| format!("Bitmap creation failed: {err}"))?;
-
-    let engine = OcrEngine::TryCreateFromUserProfileLanguages()
-        .map_err(|err| format!("OCR engine unavailable: {err}"))?;
-    let result = engine
-        .RecognizeAsync(&bitmap)
-        .map_err(|err| format!("OCR request failed: {err}"))?
-        .get()
-        .map_err(|err| format!("OCR failed: {err}"))?;
-
-    let text = result
-        .Text()
-        .map_err(|err| format!("OCR read failed: {err}"))?
-        .to_string();
-    Ok(text.trim().to_string())
+    let mut rgba = vec![0u8; bgra.len()];
+    for (chunk, out) in bgra.chunks_exact(4).zip(rgba.chunks_exact_mut(4)) {
+        out[0] = chunk[2];
+        out[1] = chunk[1];
+        out[2] = chunk[0];
+        out[3] = chunk[3];
+    }
+    let image = image::RgbaImage::from_raw(width, height, rgba)
+        .ok_or_else(|| "Failed to create image buffer.".to_string())?;
+    let image = DynamicImage::ImageRgba8(image);
+    let (resized, scale_factor) = downscale_image(image);
+    let bytes = encode_png(&resized)?;
+    let preview = resize_for_preview(&resized);
+    let preview_bytes = encode_png(&preview)?;
+    Ok(EncodedPng {
+        bytes,
+        preview_bytes,
+        width: resized.width(),
+        height: resized.height(),
+        scale_factor,
+    })
 }
 
 
@@ -207,6 +233,132 @@ fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, Stri
     }
 }
 
+#[cfg(target_os = "macos")]
+fn capture_screen_png() -> Result<EncodedPng, String> {
+    use std::process::Command;
+
+    let path = std::env::temp_dir().join(format!(
+        "ai-copilot-screen-{}.png",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "Failed to generate timestamp.")?
+            .as_millis()
+    ));
+
+    let status = Command::new("screencapture")
+        .arg("-x")
+        .arg("-t")
+        .arg("png")
+        .arg(&path)
+        .status()
+        .map_err(|err| format!("Failed to run screencapture: {err}"))?;
+
+    if !status.success() {
+        return Err("screencapture command failed.".into());
+    }
+
+    let bytes = std::fs::read(&path).map_err(|err| format!("Failed to read capture: {err}"))?;
+    let _ = std::fs::remove_file(&path);
+    let image =
+        image::load_from_memory(&bytes).map_err(|err| format!("PNG load failed: {err}"))?;
+    let (resized, scale_factor) = downscale_image(image);
+    let bytes = encode_png(&resized)?;
+    let preview = resize_for_preview(&resized);
+    let preview_bytes = encode_png(&preview)?;
+    Ok(EncodedPng {
+        bytes,
+        preview_bytes,
+        width: resized.width(),
+        height: resized.height(),
+        scale_factor,
+    })
+}
+
+fn downscale_image(image: DynamicImage) -> (DynamicImage, f64) {
+    let width = image.width();
+    let height = image.height();
+    let max_dim = width.max(height);
+    if max_dim <= MAX_IMAGE_DIM {
+        return (image, 1.0);
+    }
+    let scale = MAX_IMAGE_DIM as f64 / max_dim as f64;
+    let target_width = (width as f64 * scale).round().max(1.0) as u32;
+    let target_height = (height as f64 * scale).round().max(1.0) as u32;
+    let resized = image.resize(target_width, target_height, image::imageops::FilterType::Triangle);
+    (resized, scale)
+}
+
+fn resize_for_preview(image: &DynamicImage) -> DynamicImage {
+    let width = image.width();
+    let height = image.height();
+    let max_dim = width.max(height);
+    if max_dim <= PREVIEW_MAX_DIM {
+        return image.clone();
+    }
+    let scale = PREVIEW_MAX_DIM as f64 / max_dim as f64;
+    let target_width = (width as f64 * scale).round().max(1.0) as u32;
+    let target_height = (height as f64 * scale).round().max(1.0) as u32;
+    image.resize(target_width, target_height, image::imageops::FilterType::Triangle)
+}
+
+fn encode_png(image: &DynamicImage) -> Result<Vec<u8>, String> {
+    use std::io::Cursor;
+
+    let mut buffer = Cursor::new(Vec::new());
+    image
+        .write_to(&mut buffer, ImageFormat::Png)
+        .map_err(|err| format!("PNG encode failed: {err}"))?;
+    Ok(buffer.into_inner())
+}
+
+fn save_capture(app: &AppHandle, png: &EncodedPng) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|err| format!("Failed to locate cache dir: {err}"))?
+        .join("captures");
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| format!("Failed to create capture dir: {err}"))?;
+    let filename = format!(
+        "capture-{}.png",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "Failed to generate timestamp.")?
+            .as_millis()
+    );
+    let path = dir.join(filename);
+    std::fs::write(&path, &png.bytes)
+        .map_err(|err| format!("Failed to write capture: {err}"))?;
+    prune_captures(&dir, MAX_CAPTURE_FILES);
+    Ok(path)
+}
+
+fn prune_captures(dir: &Path, max_files: usize) {
+    let mut entries: Vec<(PathBuf, std::time::SystemTime)> = std::fs::read_dir(dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("png") {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((path, modified))
+        })
+        .collect();
+
+    if entries.len() <= max_files {
+        return;
+    }
+
+    entries.sort_by_key(|(_, modified)| *modified);
+    let remove_count = entries.len().saturating_sub(max_files);
+    for (path, _) in entries.into_iter().take(remove_count) {
+        let _ = std::fs::remove_file(path);
+    }
+}
 
 #[cfg(target_os = "windows")]
 fn active_window_rect() -> Result<(windows::Win32::Foundation::RECT, Option<String>), String> {

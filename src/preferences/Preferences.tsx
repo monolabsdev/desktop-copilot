@@ -103,15 +103,15 @@ export function Preferences() {
       ...prev,
       appearance: { ...prev.appearance, show_thinking: enabled },
     }));
+  const setAgentsSdkEnabled = (enabled: boolean) =>
+    setConfig((prev) => ({
+      ...prev,
+      tools: { ...prev.tools, agents_sdk_enabled: enabled },
+    }));
   const setCaptureEnabled = (enabled: boolean) =>
     setConfig((prev) => ({
       ...prev,
       tools: { ...prev.tools, capture_screen_text_enabled: enabled },
-    }));
-  const setAgentEnabled = (enabled: boolean) =>
-    setConfig((prev) => ({
-      ...prev,
-      tools: { ...prev.tools, agent_enabled: enabled },
     }));
 
   const isDirty = useMemo(
@@ -248,18 +248,18 @@ export function Preferences() {
                   onCheckedChange={setCaptureEnabled}
                 />
                 <Label htmlFor="capture-screen-text" className="panel-label">
-                  Capture active window text
+                  Capture screen image
                 </Label>
                 <StatusChip variant="beta" />
               </PanelRow>
               <PanelRow>
                 <Switch
-                  id="agent-enabled"
-                  checked={config.tools.agent_enabled}
-                  onCheckedChange={setAgentEnabled}
+                  id="agents-sdk"
+                  checked={config.tools.agents_sdk_enabled}
+                  onCheckedChange={setAgentsSdkEnabled}
                 />
-                <Label htmlFor="agent-enabled" className="panel-label">
-                  Enable agent mode (file access)
+                <Label htmlFor="agents-sdk" className="panel-label">
+                  Use Agents SDK
                 </Label>
                 <StatusChip variant="experimental" />
               </PanelRow>

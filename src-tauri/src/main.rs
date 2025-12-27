@@ -88,7 +88,7 @@ fn main() {
             config::set_capture_tool_enabled,
             config::get_overlay_config,
             config::set_overlay_config,
-            capture::capture_screen_text,
+            capture::capture_screen_image,
             files::read_file,
             ollama::ollama_health_check,
             ollama::ollama_chat,

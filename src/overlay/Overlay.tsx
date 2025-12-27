@@ -12,30 +12,29 @@ import { MessageList } from "./components/MessageList";
 import { ChatControls } from "./components/ChatControls";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
+import { useAgentsSdkChat } from "./hooks/useAgentsSdkChat";
 import { useOverlayHotkeys } from "./hooks/useOverlayHotkeys";
-import { DEFAULT_MODEL } from "./constants";
+import { DEFAULT_MODEL, VISION_MODEL } from "./constants";
 import { CaptureConsentModal } from "./components/CaptureConsentModal";
 import { OllamaRequiredModal } from "./components/OllamaRequiredModal";
 import { useOllamaHealth } from "./hooks/useOllamaHealth";
 import { OverlayHeader } from "./components/OverlayHeader";
 import { DEFAULT_OVERLAY_CONFIG, type OverlayConfig } from "../shared/config";
 import { useTauriEvent } from "../shared/hooks/useTauriEvent";
-import {
-  PanelFrame,
-  PanelRoot,
-  PanelStage,
-} from "@/components/layout/panel";
+import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
 import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
 
 export function Overlay() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
-  const [agentEnabled, setAgentEnabled] = useState(false);
   const [panelOpacity, setPanelOpacity] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity,
   );
   const [showThinking, setShowThinking] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.show_thinking,
+  );
+  const [agentsSdkEnabled, setAgentsSdkEnabled] = useState(
+    DEFAULT_OVERLAY_CONFIG.tools.agents_sdk_enabled,
   );
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -54,9 +53,9 @@ export function Overlay() {
   // Keep React state aligned with the persisted config payload.
   const applyConfig = useCallback((config: OverlayConfig) => {
     setCaptureToolEnabled(config.tools.capture_screen_text_enabled);
-    setAgentEnabled(config.tools.agent_enabled);
     setPanelOpacity(config.appearance.panel_opacity);
     setShowThinking(config.appearance.show_thinking);
+    setAgentsSdkEnabled(config.tools.agents_sdk_enabled);
   }, []);
 
   useTauriEvent("overlay:shown", () => {
@@ -160,6 +159,26 @@ export function Overlay() {
     consentResolver.current = null;
   }, []);
 
+  const ollamaChat = useOllamaChat(DEFAULT_MODEL, {
+    toolsEnabled: captureToolEnabled,
+    visionModel: VISION_MODEL,
+    requestScreenCapture: requestCaptureConsent,
+    setCaptureInProgress: setIsCapturing,
+    beforeCapture: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await invoke("set_overlay_visibility", { visible: false });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    },
+    afterCapture: async () => {
+      const window = getCurrentWindow();
+      await invoke("set_overlay_visibility", { visible: true });
+      await window.setFocus();
+    },
+  });
+  const agentsChat = useAgentsSdkChat({
+    toolsEnabled: false,
+    visionModel: VISION_MODEL,
+  });
   const {
     messages,
     input,
@@ -172,23 +191,7 @@ export function Overlay() {
     regenerateLastResponse,
     canRegenerate,
     toolUsage,
-  } = useOllamaChat(DEFAULT_MODEL, {
-    toolsEnabled: captureToolEnabled,
-    agentEnabled,
-    requestScreenCapture: requestCaptureConsent,
-    setCaptureInProgress: setIsCapturing,
-    beforeCapture: async () => {
-      // Hide the overlay so the OCR doesn't capture itself.
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      await invoke("set_overlay_visibility", { visible: false });
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    },
-    afterCapture: async () => {
-      const window = getCurrentWindow();
-      await invoke("set_overlay_visibility", { visible: true });
-      await window.setFocus();
-    },
-  });
+  } = agentsSdkEnabled ? agentsChat : ollamaChat;
   const inputHistory = useMemo(
     () =>
       messages

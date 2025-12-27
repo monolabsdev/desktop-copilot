@@ -43,7 +43,7 @@ export function ChatInput({
   }, [resolvedRef]);
 
   return (
-    <div className="px-5 pt-4 flex w-full gap-2">
+    <div className="overlay-chat-input px-5 pt-4 flex w-full gap-2">
       <Input
         aria-label="Chat message"
         placeholder="Type and press Enter"
@@ -69,7 +69,7 @@ export function ChatInput({
         aria-label={isSending ? "Cancel response" : "Send message"}
         disabled={!isSending && !input.trim()}
         onClick={isSending ? onCancel : onSend}
-        className="h-10 w-10 min-w-10 rounded-md bg-white/5 text-white/80 hover:bg-white/10"
+        className="h-9 w-9 min-w-9 rounded-full bg-white/5 text-white/70 hover:bg-white/10"
       >
         {isSending ? <Square /> : <ArrowUp />}
       </Button>
