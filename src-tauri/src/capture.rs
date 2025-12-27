@@ -117,10 +117,6 @@ async fn capture_text(x: i32, y: i32, width: u32, height: u32) -> Result<String,
     Ok(text.trim().to_string())
 }
 
-#[cfg(not(target_os = "windows"))]
-async fn capture_text(_x: i32, _y: i32, _width: u32, _height: u32) -> Result<String, String> {
-    Err("Screen OCR is not implemented for this OS yet.".into())
-}
 
 #[cfg(target_os = "windows")]
 fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, String> {
@@ -211,10 +207,6 @@ fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, Stri
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn capture_bgra(_x: i32, _y: i32, _width: u32, _height: u32) -> Result<Vec<u8>, String> {
-    Err("Screen capture is only implemented for Windows.".into())
-}
 
 #[cfg(target_os = "windows")]
 fn active_window_rect() -> Result<(windows::Win32::Foundation::RECT, Option<String>), String> {
@@ -238,10 +230,6 @@ fn active_window_rect() -> Result<(windows::Win32::Foundation::RECT, Option<Stri
     }
 }
 
-#[cfg(not(target_os = "windows"))]
-fn active_window_rect() -> Result<((), Option<String>), String> {
-    Err("Window capture is only implemented for Windows.".into())
-}
 
 #[cfg(target_os = "windows")]
 fn window_title(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {

@@ -58,7 +58,7 @@ fn main() {
                             return;
                         }
 
-                        let mut builder = WebviewWindowBuilder::new(
+                        let builder = WebviewWindowBuilder::new(
                             app,
                             "preferences",
                             WebviewUrl::App("index.html?view=preferences".into()),
@@ -68,13 +68,8 @@ fn main() {
                         .resizable(false)
                         .decorations(true);
                         #[cfg(target_os = "windows")]
-                        {
-                            builder = builder.transparent(true);
-                        }
+                        let builder = builder.transparent(true);
                         let _ = builder.build();
-                        .transparent(false)
-                        .decorations(true)
-                        .build();
                     }
                     // adds the event for the quit menu uitem
                     "quit" => app.exit(0),
