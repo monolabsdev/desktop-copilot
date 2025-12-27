@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { Message } from "ollama";
+import type { ChatMessage } from "../hooks/ollama/types";
 import { ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { StatusChip } from "@/components/ui/status-chip";
 import { MessageBubble } from "./MessageBubble";
 
 interface Props {
-  messages: Array<Message & { thinking?: string; thinkingDurationMs?: number }>;
+  messages: ChatMessage[];
   isSending: boolean;
   showThinking: boolean;
   ollamaConnected: boolean;
@@ -72,17 +71,13 @@ export function MessageList({
         ref={listRef}
         onScroll={handleScroll}
         data-scroll-container
-        className="h-full overflow-y-auto px-5 py-5 space-y-5"
+        className="overlay-message-list h-full overflow-y-auto px-5 py-4 space-y-4"
       >
         {messages.length === 0 ? (
-          <div className="flex items-center justify-between rounded-md border border-white/5 bg-white/5 px-4 py-3 text-xs text-white/60">
-            <span>Ollama status</span>
-            <StatusChip
-              variant={ollamaConnected ? "connected" : "disconnected"}
-              showDot
-              casing="normal"
-              className="px-2 py-1 text-[11px]"
-            />
+          <div className="rounded-md border border-white/5 bg-white/5 px-4 py-3 text-xs text-white/55">
+            {ollamaConnected
+              ? "Ask a quick question. Press Enter to send."
+              : "Ollama is offline. Start it to chat."}
           </div>
         ) : (
           messages.map((message, index) => (
@@ -108,7 +103,7 @@ export function MessageList({
           size="sm"
           data-no-drag
           onClick={handleScrollToBottom}
-          className="absolute bottom-4 right-5 bg-white/10 text-white/80 shadow-lg hover:bg-white/20"
+          className="absolute bottom-4 right-5 bg-white/10 text-white/70 hover:bg-white/15"
         >
           <ArrowDown className="h-4 w-4" />
           Back to bottom

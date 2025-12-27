@@ -19,8 +19,8 @@ pub struct KeybindConfig {
 pub struct ToolConfig {
     #[serde(default = "default_capture_tool_enabled")]
     pub capture_screen_text_enabled: bool,
-    #[serde(default = "default_agent_enabled")]
-    pub agent_enabled: bool,
+    #[serde(default = "default_agents_sdk_enabled")]
+    pub agents_sdk_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ fn default_show_thinking() -> bool {
     true
 }
 
-fn default_agent_enabled() -> bool {
+fn default_agents_sdk_enabled() -> bool {
     false
 }
 
@@ -51,7 +51,7 @@ impl Default for ToolConfig {
     fn default() -> Self {
         Self {
             capture_screen_text_enabled: true,
-            agent_enabled: default_agent_enabled(),
+            agents_sdk_enabled: default_agents_sdk_enabled(),
         }
     }
 }

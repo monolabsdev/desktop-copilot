@@ -15,6 +15,11 @@ export function useInputHistory({
   const draftRef = useRef("");
   const historyRef = useRef(history);
   const historyLengthRef = useRef(history.length);
+  const indexRef = useRef(index);
+
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
 
   useEffect(() => {
     historyRef.current = history;
@@ -46,21 +51,20 @@ export function useInputHistory({
       if (!entries.length) return false;
 
       event.preventDefault();
-      setIndex((prev) => {
-        if (prev === -1) {
-          draftRef.current = value;
-        }
-        const nextIndex =
-          event.key === "ArrowUp"
-            ? Math.min(prev + 1, entries.length - 1)
-            : Math.max(prev - 1, -1);
+      const prevIndex = indexRef.current;
+      if (prevIndex === -1) {
+        draftRef.current = value;
+      }
+      const nextIndex =
+        event.key === "ArrowUp"
+          ? Math.min(prevIndex + 1, entries.length - 1)
+          : Math.max(prevIndex - 1, -1);
       const nextValue =
-          nextIndex === -1
-            ? draftRef.current
-            : entries[entries.length - 1 - nextIndex];
-        setValue(nextValue);
-        return nextIndex;
-      });
+        nextIndex === -1
+          ? draftRef.current
+          : entries[entries.length - 1 - nextIndex];
+      setIndex(nextIndex);
+      setValue(nextValue);
 
       return true;
     },

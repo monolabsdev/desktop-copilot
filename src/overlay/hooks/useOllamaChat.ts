@@ -1,15 +1,8 @@
 import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { BaseMessage } from "@langchain/core/messages";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
-import { CAPTURE_SCREEN_TEXT_TOOL } from "../tools/captureScreenText";
-import {
-  createFileAgent,
-  getLatestAssistantMessage,
-  toLangChainHistory,
-  toOllamaMessages,
-} from "../ollama/agent";
+import { CAPTURE_SCREEN_IMAGE_TOOL } from "../tools/captureScreenImage";
 import {
   createStreamChat,
   createToolHandler,
@@ -33,14 +26,9 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   const requestIdRef = useRef(0);
   const streamMessageIdRef = useRef(0);
   const historyRef = useRef<Message[]>([]);
-  const agentRef = useRef<Awaited<ReturnType<typeof createFileAgent>> | null>(
-    null,
-  );
-  const agentModelRef = useRef<string | null>(null);
+  const toolActivityRef = useRef<string | null>(null);
   const toolConfig = options?.toolsEnabled
-    ? options?.agentEnabled
-      ? undefined
-      : [CAPTURE_SCREEN_TEXT_TOOL]
+    ? [CAPTURE_SCREEN_IMAGE_TOOL]
     : undefined;
   const streamChat = createStreamChat({
     model,
@@ -59,6 +47,10 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       result.assistantMessage,
       result.thinkingDurationMs,
     );
+    if (toolActivityRef.current) {
+      normalized.displayMessage.toolActivity = toolActivityRef.current;
+      toolActivityRef.current = null;
+    }
     appendHistory([normalized.historyMessage]);
     setMessages((prev) =>
       prev.map((message) =>
@@ -70,12 +62,34 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   };
   const toolHandlerOptions: ToolOptions = {
     toolsEnabled: options?.toolsEnabled ?? false,
-    agentEnabled: options?.agentEnabled,
     requestScreenCapture: options?.requestScreenCapture,
     setCaptureInProgress: options?.setCaptureInProgress,
     beforeCapture: options?.beforeCapture,
     afterCapture: options?.afterCapture,
     setToolUsage,
+    visionModel: options?.visionModel,
+    onLocalMessage: (message) =>
+      setMessages((prev) => {
+        const next = [...prev, message];
+        const screenshotIndexes = next
+          .map((item, index) => {
+            const withImage = item as ChatMessage & {
+              images?: string[];
+              imagePath?: string;
+            };
+            return withImage.images?.length || withImage.imagePath ? index : -1;
+          })
+          .filter((index) => index >= 0);
+        const maxScreenshots = 3;
+        if (screenshotIndexes.length <= maxScreenshots) return next;
+        const toRemove = new Set(
+          screenshotIndexes.slice(0, screenshotIndexes.length - maxScreenshots),
+        );
+        return next.filter((_, index) => !toRemove.has(index));
+      }),
+    onToolActivity: (activity) => {
+      toolActivityRef.current = activity;
+    },
   };
 
   const { handleToolCalls } = createToolHandler({
@@ -86,6 +100,31 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     requestIdRef,
     applyAssistantMessage,
   });
+
+  const buildBaseMessages = (allowImages: boolean) => {
+    const base = historyRef.current;
+    if (allowImages) return base;
+    return base.map((message) => {
+      const withImages = message as Message & { images?: string[] };
+      const nextContent =
+        typeof withImages.content === "string"
+          ? withImages.content.replace(
+              /!\[[^\]]*]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/g,
+              "",
+            ).trim()
+          : withImages.content;
+      if (!withImages.images || withImages.images.length === 0) {
+        return nextContent === withImages.content
+          ? message
+          : ({ ...withImages, content: nextContent } as Message);
+      }
+      const { images: _images, ...rest } = withImages;
+      return {
+        ...rest,
+        content: nextContent ?? "",
+      } as Message;
+    });
+  };
 
   const sendMessage = async () => {
     const trimmed = input.trim();
@@ -120,11 +159,13 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     setIsSending(false);
     setError(null);
     setToolUsage((prev) => ({ ...prev, inProgress: false }));
+    toolActivityRef.current = null;
   };
 
   const clearHistory = () => {
     setMessages([]);
     historyRef.current = [];
+    toolActivityRef.current = null;
   };
 
   const regenerateLastResponse = async () => {
@@ -151,16 +192,6 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     regenerateLastResponse,
     canRegenerate,
   };
-
-  async function getAgent() {
-    if (agentRef.current && agentModelRef.current === model) {
-      return agentRef.current;
-    }
-    const agent = await createFileAgent(model);
-    agentRef.current = agent;
-    agentModelRef.current = model;
-    return agent;
-  }
 
   async function runChat(
     content: string,
@@ -189,36 +220,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     requestIdRef.current = requestId;
 
     try {
-      const baseMessages = historyRef.current;
-      if (options?.agentEnabled) {
-        const agent = await getAgent();
-        const historyMessages = toLangChainHistory(baseMessages);
-        const result = (await agent.invoke({
-          messages: historyMessages,
-        })) as {
-          messages?: BaseMessage[];
-        };
-        if (requestId !== requestIdRef.current) return;
-        const resultMessages = Array.isArray(result?.messages)
-          ? result.messages
-          : [];
-        const assistantMessage = getLatestAssistantMessage(resultMessages);
-        if (!assistantMessage) {
-          throw new Error("No response from agent.");
-        }
-        const newHistory =
-          resultMessages.length >= historyMessages.length
-            ? resultMessages.slice(historyMessages.length)
-            : resultMessages;
-        if (newHistory.length) {
-          appendHistory(toOllamaMessages(newHistory));
-        } else {
-          appendHistory([assistantMessage]);
-        }
-        setMessages((prev) => [...prev, assistantMessage]);
-        return;
-      }
-
+      const baseMessages = buildBaseMessages(false);
       const result = await streamChat(baseMessages, requestId, requestStartedAt);
       if (!result || requestId !== requestIdRef.current) return;
 

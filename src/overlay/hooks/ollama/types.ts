@@ -6,12 +6,14 @@ export type CaptureConsent = {
 
 export type ToolOptions = {
   toolsEnabled: boolean;
-  agentEnabled?: boolean;
   requestScreenCapture?: () => Promise<CaptureConsent>;
   setCaptureInProgress?: (inProgress: boolean) => void;
   setToolUsage?: (usage: ToolUsage) => void;
   beforeCapture?: () => Promise<void> | void;
   afterCapture?: () => Promise<void> | void;
+  visionModel?: string;
+  onLocalMessage?: (message: ChatMessage) => void;
+  onToolActivity?: (activity: string | null) => void;
 };
 
 export type ToolUsage = {
@@ -24,6 +26,11 @@ export type ChatMessage = Message & {
   thinking?: string;
   thinkingDurationMs?: number;
   streamId?: number;
+  imagePath?: string;
+  imageMime?: string;
+  imagePreviewBase64?: string;
+  imagePreviewMime?: string;
+  toolActivity?: string;
 };
 
 export type AssistantPayload = Message & {

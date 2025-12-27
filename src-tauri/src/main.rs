@@ -58,7 +58,7 @@ fn main() {
                             return;
                         }
 
-                        let _ = WebviewWindowBuilder::new(
+                        let builder = WebviewWindowBuilder::new(
                             app,
                             "preferences",
                             WebviewUrl::App("index.html?view=preferences".into()),
@@ -66,9 +66,10 @@ fn main() {
                         .title("Preferences")
                         .inner_size(420.0, 520.0)
                         .resizable(false)
-                        .transparent(false)
-                        .decorations(true)
-                        .build();
+                        .decorations(true);
+                        #[cfg(target_os = "windows")]
+                        let builder = builder.transparent(true);
+                        let _ = builder.build();
                     }
                     // adds the event for the quit menu uitem
                     "quit" => app.exit(0),
@@ -87,7 +88,7 @@ fn main() {
             config::set_capture_tool_enabled,
             config::get_overlay_config,
             config::set_overlay_config,
-            capture::capture_screen_text,
+            capture::capture_screen_image,
             files::read_file,
             ollama::ollama_health_check,
             ollama::ollama_chat,
