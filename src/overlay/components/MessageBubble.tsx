@@ -13,7 +13,10 @@ import {
   ChainOfThoughtImage,
   ChainOfThoughtStep,
 } from "@/components/ui/chain-of-thought";
-import { isToolActivityShimmer } from "../tools/registry";
+import {
+  getToolIconByActivity,
+  isToolActivityShimmer,
+} from "../tools/registry";
 import { RotateCcw } from "lucide-react";
 
 type MessageWithImages = Message & {
@@ -138,6 +141,7 @@ function buildToolEntries(activities: string[], hasScreenshot: boolean) {
     key: label,
     label,
     shimmer: isToolActivityShimmer(label),
+    icon: getToolIconByActivity(label),
     showImage: false,
   }));
   if (!hasScreenshot) return entries;
@@ -153,6 +157,7 @@ function buildToolEntries(activities: string[], hasScreenshot: boolean) {
       key: "Captured screen",
       label: "Captured screen.",
       shimmer: false,
+      icon: getToolIconByActivity("Captured screen."),
       showImage: true,
     },
   ];
@@ -212,6 +217,7 @@ function MessageBubbleComponent({
               <ChainOfThoughtHeader
                 collapsible={entry.showImage}
                 showChevron={entry.showImage}
+                icon={entry.icon}
               >
                 {entry.shimmer ? (
                   <TextShimmer

@@ -17,6 +17,7 @@ import type { ChatMessage, ToolOptions, ToolUsage } from "./ollama/types";
 import { toErrorMessage } from "./ollama/utils";
 import { appendScreenshotMessage } from "./ollama/screenshot";
 import { getToolActivityLabel, isToolEnabled } from "../tools/registry";
+import { CLIPBOARD_CONTEXT_TOOL_NAME } from "../tools/clipboardContext";
 
 type UseAgentsSdkOptions = ToolOptions & {
   model?: string;
@@ -41,6 +42,9 @@ const AGENT_INSTRUCTIONS =
   "Never send the screenshot back to the user; they already have it.";      
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+const DEFAULT_CLIPBOARD_MAX_CHARS = 4000;
+const MIN_CLIPBOARD_CHARS = 24;
+const CLIPBOARD_CONTEXT_LABEL = "Clipboard context";
 
 export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -184,13 +188,117 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
         }
       },
     });
+    const clipboardTool = tool({
+      name: CLIPBOARD_CONTEXT_TOOL_NAME,
+      description:
+        "Read the user's clipboard text to provide extra context when relevant.",
+      parameters: {
+        type: "object",
+        properties: {
+          max_chars: {
+            type: "number",
+            description: "Maximum number of characters to read.",
+          },
+        },
+        additionalProperties: false,
+      },
+      strict: false,
+      execute: async (args?: { max_chars?: number }) => {
+        if (!isToolEnabled(CLIPBOARD_CONTEXT_TOOL_NAME, options)) {
+          return "Clipboard tool is disabled.";
+        }
+        const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
+        toolActivityRef.current = toolActivityRef.current
+          ? [...toolActivityRef.current, activity]
+          : [activity];
+        setToolUsage({ inProgress: true, name: CLIPBOARD_CONTEXT_TOOL_NAME });
+        try {
+          const maxChars =
+            typeof args?.max_chars === "number" ? args.max_chars : undefined;
+          const response = await invoke<{
+            text?: string;
+            truncated?: boolean;
+            length?: number;
+          }>("read_clipboard_text", { max_chars: maxChars });
+          if (!response?.text) {
+            return "Clipboard is empty or not text.";
+          }
+          return response.text;
+        } finally {
+          setToolUsage({
+            inProgress: false,
+            name: CLIPBOARD_CONTEXT_TOOL_NAME,
+            lastUsedAt: Date.now(),
+          });
+        }
+      },
+    });
     agentRef.current = new Agent({
       name: "Overlay Assistant",
       instructions: AGENT_INSTRUCTIONS,
       model: nextConfig.model,
-      tools: [captureTool],
+      tools: [captureTool, clipboardTool],
     });
     agentConfigRef.current = nextConfig;
+  };
+
+  const promptHasInlineContent = (message: string) => {
+    if (message.includes("```")) return true;
+    const lines = message.split("\n");
+    if (lines.length > 3) return true;
+    return message.length > 500;
+  };
+
+  const looksLikeCode = (text: string) => {
+    const codeHints = [
+      "function ",
+      "class ",
+      "const ",
+      "let ",
+      "var ",
+      "import ",
+      "export ",
+      "#include",
+      "=>",
+      ";",
+      "{",
+      "}",
+    ];
+    if (text.includes("\n") && text.includes(";")) return true;
+    return codeHints.some((hint) => text.includes(hint));
+  };
+
+  const shouldAutoUseClipboard = (prompt: string, clipboard: string) => {
+    if (promptHasInlineContent(prompt)) return false;
+    const normalized = prompt.toLowerCase();
+    const explicitClipboard = /\bclipboard\b|\bpaste\b/.test(normalized);
+    const requestSignals =
+      /look at|review|check|analyz|explain|summariz|rewrite|refactor|optimi|fix|debug|error|exception|stack trace|traceback|log|bug|issue|problem/.test(
+        normalized,
+      );
+    const mentionsCode =
+      /\bcode\b|\bscript\b|\bfunction\b|\bclass\b|\bmodule\b|\bcomponent\b|\bfile\b/.test(
+        normalized,
+      );
+    const refersToContext = /\bthis\b|\bthat\b|\bthese\b|\bit\b/.test(
+        normalized,
+      );
+    const clipboardLooksLikeCode = looksLikeCode(clipboard);
+    if (explicitClipboard) return true;
+    if (!requestSignals && !(mentionsCode && refersToContext)) return false;
+    return mentionsCode || clipboardLooksLikeCode;
+  };
+
+  const buildClipboardMessage = (
+    text: string,
+    truncated: boolean,
+    isCode: boolean,
+  ) => {
+    const header = truncated
+      ? `${CLIPBOARD_CONTEXT_LABEL} (truncated):`
+      : `${CLIPBOARD_CONTEXT_LABEL}:`;
+    const body = isCode ? `\`\`\`\n${text}\n\`\`\`` : text;
+    return `${header}\n\n${body}\n\nUse this only if it helps answer the user's request.`;
   };
 
   const appendHistory = (items: AgentInputItem[]) => {
@@ -271,6 +379,37 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     abortControllerRef.current = new AbortController();
 
     try {
+      if (isToolEnabled(CLIPBOARD_CONTEXT_TOOL_NAME, options)) {
+        try {
+          const clipboardResponse = await invoke<{
+            text?: string;
+            truncated?: boolean;
+            length?: number;
+          }>("read_clipboard_text", { max_chars: DEFAULT_CLIPBOARD_MAX_CHARS });
+          const clipboardText = clipboardResponse?.text?.trim() ?? "";
+          if (
+            clipboardText.length >= MIN_CLIPBOARD_CHARS &&
+            clipboardText !== trimmed &&
+            shouldAutoUseClipboard(trimmed, clipboardText)
+          ) {
+            appendHistory([
+              user(
+                buildClipboardMessage(
+                  clipboardText,
+                  !!clipboardResponse?.truncated,
+                  looksLikeCode(clipboardText),
+                ),
+              ),
+            ]);
+            const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
+            toolActivityRef.current = toolActivityRef.current
+              ? [...toolActivityRef.current, activity]
+              : [activity];
+          }
+        } catch {
+          // Ignore clipboard errors and continue without it.
+        }
+      }
       ensureAgent();
       const agent = agentRef.current;
       const runner = runnerRef.current;

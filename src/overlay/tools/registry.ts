@@ -1,9 +1,15 @@
 import type { Message, Tool } from "ollama";
+import type { LucideIcon } from "lucide-react";
 import type { ToolOptions } from "../hooks/ollama/types";
 import { toErrorMessage } from "../hooks/ollama/utils";
 import { ollamaChat } from "../ollama/client";
 import { CAPTURE_SCREEN_IMAGE_TOOL } from "./captureScreenImage";
+import {
+  CLIPBOARD_CONTEXT_TOOL,
+  CLIPBOARD_CONTEXT_TOOL_NAME,
+} from "./clipboardContext";
 import { WEB_SEARCH_TOOL } from "./webSearch";
+import { ClipboardIcon, GlobeIcon, MonitorIcon } from "lucide-react";
 
 type InvokeFn = (
   command: string,
@@ -85,6 +91,7 @@ export type RegisteredTool = {
   activityLabel?: string;
   activityShimmer?: boolean;
   completedLabel?: string;
+  icon?: LucideIcon;
   preferences?: {
     label?: string;
     description?: string;
@@ -121,7 +128,10 @@ export type RegisteredTool = {
 // };
 
 const CAPTURE_TOOL_NAME = "capture_screen_image";
+const CLIPBOARD_TOOL_NAME = CLIPBOARD_CONTEXT_TOOL_NAME;
 const WEB_SEARCH_TOOL_NAME = "web_search";
+const DEFAULT_CLIPBOARD_MAX_CHARS = 4000;
+const MAX_CLIPBOARD_MAX_CHARS = 20000;
 
 const getToolToggle = (name: string, options?: ToolOptions) => {
   if (!options?.toolToggles) return undefined;
@@ -141,6 +151,7 @@ const captureTool: RegisteredTool = {
   name: CAPTURE_TOOL_NAME,
   tool: CAPTURE_SCREEN_IMAGE_TOOL,
   displayName: "screen capture",
+  icon: MonitorIcon,
   preferences: {
     label: "Screen capture",
     description: "Allow the assistant to request a screenshot with consent.",
@@ -272,10 +283,87 @@ const captureTool: RegisteredTool = {
   },
 };
 
+const getMaxClipboardChars = (args: unknown) => {
+  if (!args || typeof args !== "object") return DEFAULT_CLIPBOARD_MAX_CHARS;
+  const raw = "max_chars" in args ? (args as { max_chars?: unknown }).max_chars : undefined;
+  if (typeof raw !== "number" || Number.isNaN(raw)) {
+    return DEFAULT_CLIPBOARD_MAX_CHARS;
+  }
+  return Math.min(
+    MAX_CLIPBOARD_MAX_CHARS,
+    Math.max(1, Math.floor(raw)),
+  );
+};
+
+const clipboardTool: RegisteredTool = {
+  name: CLIPBOARD_TOOL_NAME,
+  tool: CLIPBOARD_CONTEXT_TOOL,
+  displayName: "clipboard context",
+  icon: ClipboardIcon,
+  preferences: {
+    label: "Clipboard context",
+    description: "Let the assistant read clipboard text when relevant.",
+    defaultEnabled: true,
+    showInPreferences: true,
+    statuses: ["preview"],
+  },
+  activityLabel: "Reading clipboard...",
+  completedLabel: "Read clipboard.",
+  isEnabled: (options) => isToolEnabled(CLIPBOARD_TOOL_NAME, options),
+  handler: async ({
+    toolCall,
+    toolCalls,
+    baseMessages,
+    options,
+    invoke,
+    appendHistory,
+    streamFollowup,
+    buildToolMessage,
+  }) => {
+    if (!isToolEnabled(CLIPBOARD_TOOL_NAME, options)) {
+      const toolMessage = buildToolMessage(CLIPBOARD_TOOL_NAME, {
+        error: "Clipboard tool is disabled.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    const args = toolCall?.function?.arguments ?? {};
+    const maxChars = getMaxClipboardChars(args);
+    let clipboardResponse: unknown = null;
+    try {
+      clipboardResponse = await invoke("read_clipboard_text", {
+        max_chars: maxChars,
+      });
+    } catch (err) {
+      throw new Error(toErrorMessage(err, "Clipboard read failed."));
+    }
+
+    const payload =
+      clipboardResponse && typeof clipboardResponse === "object"
+        ? clipboardResponse
+        : { text: "", truncated: false };
+    const toolMessage = buildToolMessage(CLIPBOARD_TOOL_NAME, payload);
+
+    appendHistory([
+      { role: "assistant", content: "", tool_calls: toolCalls },
+      toolMessage,
+    ]);
+
+    await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+    return true;
+  },
+};
+
 const webSearchTool: RegisteredTool = {
   name: WEB_SEARCH_TOOL_NAME,
   tool: WEB_SEARCH_TOOL,
   displayName: "web search",
+  icon: GlobeIcon,
   preferences: {
     label: "Web search",
     description: "Let the assistant search the web for fresh information.",
@@ -360,7 +448,11 @@ const webSearchTool: RegisteredTool = {
   },
 };
 
-export const TOOL_REGISTRY: RegisteredTool[] = [captureTool, webSearchTool];
+export const TOOL_REGISTRY: RegisteredTool[] = [
+  captureTool,
+  clipboardTool,
+  webSearchTool,
+];
 
 export function getToolDefinition(name?: string) {
   if (!name) return undefined;
@@ -389,6 +481,16 @@ export function getToolActivityLabel(name?: string) {
   if (tool?.activityLabel) return tool.activityLabel;
   if (!name) return "Using tool.";
   return `Using ${name.replace(/_/g, " ")}.`;
+}
+
+export function getToolIconByActivity(activity?: string | null) {
+  if (!activity) return undefined;
+  return TOOL_REGISTRY.find((tool) => {
+    const activityLabel = tool.activityLabel ?? getToolActivityLabel(tool.name);
+    const completedLabel =
+      tool.completedLabel ?? getToolCompletedLabel(tool.name);
+    return activity === activityLabel || activity === completedLabel;
+  })?.icon;
 }
 
 export function getToolCompletedLabel(name?: string) {

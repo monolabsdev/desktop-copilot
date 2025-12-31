@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod capture;
+mod clipboard;
 mod config;
 mod files;
 mod ollama;
@@ -122,6 +123,7 @@ fn main() {
             config::get_overlay_config,
             config::set_overlay_config,
             capture::capture_screen_image,
+            clipboard::read_clipboard_text,
             files::read_file,
             ollama::ollama_health_check,
             ollama::ollama_chat,

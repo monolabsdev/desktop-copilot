@@ -3,10 +3,12 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
 import {
+  getToolCompletedLabel,
   getToolActivityReplacement,
   getToolConfig,
   isToolEnabled,
 } from "../tools/registry";
+import { CLIPBOARD_CONTEXT_TOOL_NAME } from "../tools/clipboardContext";
 import {
   createStreamChat,
   createToolHandler,
@@ -24,6 +26,10 @@ const OLLAMA_INSTRUCTIONS =
   "Keep answers concise, structured, and actionable. " +
   "Use the screenshot tool only when it helps answer the user's request or they explicitly ask for it. " +
   "Never send the screenshot back to the user; they already have it.";
+
+const DEFAULT_CLIPBOARD_MAX_CHARS = 4000;
+const MIN_CLIPBOARD_CHARS = 24;
+const CLIPBOARD_CONTEXT_LABEL = "Clipboard context";
 
 export function useOllamaChat(model: string, options?: ToolOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -170,6 +176,74 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     );
   };
 
+  const promptHasInlineContent = (message: string) => {
+    if (message.includes("```")) return true;
+    const lines = message.split("\n");
+    if (lines.length > 3) return true;
+    return message.length > 500;
+  };
+
+  const looksLikeCode = (text: string) => {
+    const codeHints = [
+      "function ",
+      "class ",
+      "const ",
+      "let ",
+      "var ",
+      "import ",
+      "export ",
+      "#include",
+      "=>",
+      ";",
+      "{",
+      "}",
+    ];
+    if (text.includes("\n") && text.includes(";")) return true;
+    return codeHints.some((hint) => text.includes(hint));
+  };
+
+  const shouldAutoUseClipboard = (prompt: string, clipboard: string) => {
+    if (promptHasInlineContent(prompt)) return false;
+    const normalized = prompt.toLowerCase();
+    const explicitClipboard = /\bclipboard\b|\bpaste\b/.test(normalized);
+    const requestSignals =
+      /look at|review|check|analyz|explain|summariz|rewrite|refactor|optimi|fix|debug|error|exception|stack trace|traceback|log|bug|issue|problem/.test(
+        normalized,
+      );
+    const mentionsCode =
+      /\bcode\b|\bscript\b|\bfunction\b|\bclass\b|\bmodule\b|\bcomponent\b|\bfile\b/.test(
+        normalized,
+      );
+    const refersToContext = /\bthis\b|\bthat\b|\bthese\b|\bit\b/.test(
+        normalized,
+      );
+    const clipboardLooksLikeCode = looksLikeCode(clipboard);
+    if (explicitClipboard) return true;
+    if (!requestSignals && !(mentionsCode && refersToContext)) return false;
+    return mentionsCode || clipboardLooksLikeCode;
+  };
+
+  const addToolActivity = (label: string) => {
+    const current = toolActivityRef.current ?? [];
+    if (current.includes(label)) return;
+    toolActivityRef.current = current.length ? [...current, label] : [label];
+  };
+
+  const buildClipboardMessage = (
+    text: string,
+    truncated: boolean,
+    isCode: boolean,
+  ): Message => {
+    const header = truncated
+      ? `${CLIPBOARD_CONTEXT_LABEL} (truncated):`
+      : `${CLIPBOARD_CONTEXT_LABEL}:`;
+    const body = isCode ? `\`\`\`\n${text}\n\`\`\`` : text;
+    return {
+      role: "user",
+      content: `${header}\n\n${body}\n\nUse this only if it helps answer the user's request.`,
+    };
+  };
+
   const buildBaseMessages = (allowImages: boolean) => {
     const base: Message[] = [
       { role: "system", content: OLLAMA_INSTRUCTIONS },
@@ -295,8 +369,8 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     requestIdRef.current = requestId;
 
     try {
-      const baseMessages = buildBaseMessages(false);
       if (shouldForceCapture(trimmed)) {
+        const baseMessages = buildBaseMessages(false);
         const toolCalls = [
           {
             function: {
@@ -308,7 +382,34 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
         await handleToolCalls(toolCalls, baseMessages);
         return;
       }
-      const result = await streamChat(baseMessages, requestId);
+      const baseMessages = buildBaseMessages(false);
+      let requestMessages = baseMessages;
+      if (isToolEnabled(CLIPBOARD_CONTEXT_TOOL_NAME, toolHandlerOptions)) {
+        try {
+          const clipboardResponse = await invoke<{
+            text?: string;
+            truncated?: boolean;
+            length?: number;
+          }>("read_clipboard_text", { max_chars: DEFAULT_CLIPBOARD_MAX_CHARS });
+          const clipboardText = clipboardResponse?.text?.trim() ?? "";
+          if (
+            clipboardText.length >= MIN_CLIPBOARD_CHARS &&
+            clipboardText !== trimmed &&
+            shouldAutoUseClipboard(trimmed, clipboardText)
+          ) {
+            const clipboardMessage = buildClipboardMessage(
+              clipboardText,
+              !!clipboardResponse?.truncated,
+              looksLikeCode(clipboardText),
+            );
+            requestMessages = [...baseMessages, clipboardMessage];
+            addToolActivity(getToolCompletedLabel(CLIPBOARD_CONTEXT_TOOL_NAME));
+          }
+        } catch {
+          // Ignore clipboard errors and continue without it.
+        }
+      }
+      const result = await streamChat(requestMessages, requestId);
       if (!result || requestId !== requestIdRef.current) return;
 
       if (result.toolCalls && result.toolCalls.length > 0) {

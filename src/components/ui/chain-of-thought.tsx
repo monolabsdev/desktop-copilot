@@ -78,6 +78,7 @@ export type ChainOfThoughtHeaderProps = ComponentProps<
 > & {
   collapsible?: boolean;
   showChevron?: boolean;
+  icon?: LucideIcon;
 };
 
 export const ChainOfThoughtHeader = memo(
@@ -86,6 +87,7 @@ export const ChainOfThoughtHeader = memo(
     children,
     collapsible = true,
     showChevron = true,
+    icon: Icon = BrainIcon,
     ...props
   }: ChainOfThoughtHeaderProps) => {
     const { isOpen, setIsOpen } = useChainOfThought();
@@ -98,7 +100,7 @@ export const ChainOfThoughtHeader = memo(
             className,
           )}
         >
-          <BrainIcon className="size-4" />
+          <Icon className="size-4" />
           <span className="flex-1 text-left">
             {children ?? "Chain of Thought"}
           </span>
@@ -115,7 +117,7 @@ export const ChainOfThoughtHeader = memo(
           )}
           {...props}
         >
-          <BrainIcon className="size-4" />
+          <Icon className="size-4" />
           <span className="flex-1 text-left">
             {children ?? "Chain of Thought"}
           </span>
