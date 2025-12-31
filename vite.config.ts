@@ -21,7 +21,7 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         // Split heavy deps to keep initial chunks below warning thresholds.
-        manualChunks: (id) => {
+        manualChunks: (id: any) => {
           if (!id.includes("node_modules")) return undefined;
           if (id.includes("@langchain/langgraph")) return "langgraph";
           if (id.includes("@langchain/core")) return "langchain-core";
@@ -29,7 +29,6 @@ export default defineConfig(async () => ({
           if (id.includes("zod-to-json-schema")) return "zod-json";
           if (id.includes("zod")) return "zod";
           if (id.includes("react-dom") || id.includes("react/")) return "react";
-          if (id.includes("@heroui")) return "ui";
           if (id.includes("react-markdown") || id.includes("remark-gfm")) {
             return "markdown";
           }
