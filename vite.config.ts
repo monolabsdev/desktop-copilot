@@ -23,15 +23,22 @@ export default defineConfig(async () => ({
         // Split heavy deps to keep initial chunks below warning thresholds.
         manualChunks: (id: any) => {
           if (!id.includes("node_modules")) return undefined;
-          if (id.includes("@langchain/langgraph")) return "langgraph";
-          if (id.includes("@langchain/core")) return "langchain-core";
-          if (id.includes("langsmith")) return "langsmith";
-          if (id.includes("zod-to-json-schema")) return "zod-json";
-          if (id.includes("zod")) return "zod";
-          if (id.includes("react-dom") || id.includes("react/")) return "react";
-          if (id.includes("react-markdown") || id.includes("remark-gfm")) {
-            return "markdown";
-          }
+        if (id.includes("@langchain/langgraph")) return "langgraph";
+        if (id.includes("@langchain/core")) return "langchain-core";
+        if (id.includes("langsmith")) return "langsmith";
+        if (id.includes("zod-to-json-schema")) return "zod-json";
+        if (id.includes("zod")) return "zod";
+        if (id.includes("react-dom") || id.includes("react/")) return "react";
+        if (id.includes("lucide-react")) return "lucide";
+        if (id.includes("framer-motion") || id.includes("motion-dom")) {
+          return "framer-motion";
+        }
+        if (id.includes("@openai")) return "openai";
+        if (id.includes("openai/")) return "openai";
+        if (id.includes("ollama")) return "ollama";
+        if (id.includes("react-markdown") || id.includes("remark-gfm")) {
+          return "markdown";
+        }
           if (id.includes("@tauri-apps")) return "tauri";
           return undefined;
         },

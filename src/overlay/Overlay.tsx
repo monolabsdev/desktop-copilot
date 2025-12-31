@@ -30,6 +30,11 @@ import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
 const MIN_OVERLAY_WIDTH = 360;
 const MIN_OVERLAY_HEIGHT = 320;
 
+const wait = (duration: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, duration);
+  });
+
 export function Overlay() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [panelOpacity, setPanelOpacity] = useState(
@@ -202,6 +207,9 @@ export function Overlay() {
       ) {
         return;
       }
+      if (target?.closest("[data-scroll-container]")) {
+        return;
+      }
       if (isScrollbarInteraction(target, event.clientX)) {
         return;
       }
@@ -232,6 +240,33 @@ export function Overlay() {
     consentResolver.current = null;
   }, []);
 
+  const hideOverlayDuringCapture = useCallback(async () => {
+    await wait(150);
+    await invoke("set_overlay_visibility", { visible: false });
+    await wait(150);
+  }, []);
+
+  const restoreOverlayAfterCapture = useCallback(async () => {
+    const window = getCurrentWindow();
+    await invoke("set_overlay_visibility", { visible: true });
+    await window.setFocus();
+  }, []);
+
+  const captureLifecycle = useMemo(
+    () => ({
+      requestScreenCapture: requestCaptureConsent,
+      setCaptureInProgress: setIsCapturing,
+      beforeCapture: hideOverlayDuringCapture,
+      afterCapture: restoreOverlayAfterCapture,
+    }),
+    [
+      requestCaptureConsent,
+      hideOverlayDuringCapture,
+      restoreOverlayAfterCapture,
+      setIsCapturing,
+    ],
+  );
+
   const mergedToolToggles = {
     ...toolToggles,
     capture_screen_image: captureToolEnabled,
@@ -247,36 +282,14 @@ export function Overlay() {
     webSearchEnabled,
     toolToggles: mergedToolToggles,
     visionModel: VISION_MODEL,
-    requestScreenCapture: requestCaptureConsent,
-    setCaptureInProgress: setIsCapturing,
-    beforeCapture: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      await invoke("set_overlay_visibility", { visible: false });
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    },
-    afterCapture: async () => {
-      const window = getCurrentWindow();
-      await invoke("set_overlay_visibility", { visible: true });
-      await window.setFocus();
-    },
+    ...captureLifecycle,
   });
   const agentsChat = useAgentsSdkChat({
     toolsEnabled,
     captureToolEnabled,
     toolToggles: mergedToolToggles,
     visionModel: VISION_MODEL,
-    requestScreenCapture: requestCaptureConsent,
-    setCaptureInProgress: setIsCapturing,
-    beforeCapture: async () => {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      await invoke("set_overlay_visibility", { visible: false });
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    },
-    afterCapture: async () => {
-      const window = getCurrentWindow();
-      await invoke("set_overlay_visibility", { visible: true });
-      await window.setFocus();
-    },
+    ...captureLifecycle,
   });
   const {
     messages,
@@ -310,47 +323,52 @@ export function Overlay() {
       <PanelRoot variant="overlay">
         {isCapturing && <OverlayCaptureNotice />}
         <PanelStage>
-          <PanelFrame
-            variant="overlay"
-            ref={panelFrameRef}
-            className="overlay-panel"
-            onPointerDown={handlePanelPointerDown}
-          >
-            {hasMessages && (
-              <>
-                <OverlayHeader
-                  isBusy={isSending}
-                  hasMessages
-                  onClearHistory={clearHistory}
-                />
-                {/* Messages */}
-                <MessageList
-                  messages={messages}
-                  isSending={isSending}
-                  showThinking={showThinking}
-                  ollamaConnected={ollamaConnected}
-                  canRegenerate={canRegenerate}
-                  onRegenerate={regenerateLastResponse}
-                />
-              </>
-            )}
+            <PanelFrame
+              variant="overlay"
+              ref={panelFrameRef}
+              className="overlay-panel"
+              onPointerDown={handlePanelPointerDown}
+            >
+              {(hasMessages || error) && (
+                <div className="overlay-panel-body">
+                  {hasMessages && (
+                    <OverlayHeader
+                      isBusy={isSending}
+                      hasMessages
+                      onClearHistory={clearHistory}
+                    />
+                  )}
+                  <div className="overlay-panel-body-scroll" data-scroll-container>
+                    {hasMessages && (
+                      <MessageList
+                        messages={messages}
+                        isSending={isSending}
+                        showThinking={showThinking}
+                        ollamaConnected={ollamaConnected}
+                        canRegenerate={canRegenerate}
+                        onRegenerate={regenerateLastResponse}
+                      />
+                    )}
+                    {error && (
+                      <div className="overlay-panel-error px-4 pb-2 text-sm text-red-400">
+                        {error}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-            {/* Error */}
-            {error && (
-              <div className="px-4 pb-2 text-sm text-red-400">{error}</div>
-            )}
-
-            {/* Input */}
-            <ChatInput
-              input={input}
-              setInput={setInput}
-              isSending={isSending}
-              onSend={sendMessage}
-              onCancel={cancelSend}
-              inputRef={inputRef}
-              history={inputHistory}
-            />
-          </PanelFrame>
+              {/* Input */}
+              <ChatInput
+                input={input}
+                setInput={setInput}
+                isSending={isSending}
+                onSend={sendMessage}
+                onCancel={cancelSend}
+                inputRef={inputRef}
+                history={inputHistory}
+              />
+            </PanelFrame>
         </PanelStage>
       </PanelRoot>
       <CaptureConsentModal

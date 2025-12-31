@@ -89,8 +89,7 @@ export function MessageList({
       <div
         ref={listRef}
         onScroll={handleScroll}
-        data-scroll-container
-        className="overlay-message-list h-full overflow-y-auto px-5 py-4 space-y-4"
+        className="overlay-message-list flex-1 min-h-0 px-5 py-4 space-y-4"
       >
         {messages.length === 0 ? (
           <div className="rounded-md border border-white/5 bg-white/5 px-4 py-3 text-xs text-white/55">
