@@ -4,52 +4,67 @@ An always-on-top AI overlay for your desktop. The UI is React/Vite, the backend
 is Tauri (Rust), and all AI requests are routed through the backend to a local
 Ollama server.
 
-**Important: Ollama is not bundled. You must install and run it yourself.**
+**Important:** Ollama is not bundled. You must install and run it yourself.
 
-**Supported Operating Systems:**
-- [x] Windows
-- [x] MacOS (dev)
-- [ ] Linux
+## Platforms
+
+- Windows (supported)
+- macOS (dev)
+- Linux (not yet)
 
 ## Quick start
 
 Requirements:
 - Node.js + npm
-- Rust toolchain (for Tauri)
+- Rust toolchain (Tauri)
 - Ollama installed and running locally
 
-Install:
+1) Install dependencies
 ```bash
 npm install
 ```
 
-Development:
+2) Run in dev mode
 ```bash
 npm run tauri dev
 ```
 
-Build:
+3) Build a release bundle
 ```bash
 npm run tauri build
 ```
 
 ## Overlay shortcuts
 
-- Toggle overlay: `Ctrl+Space`
-- Focus overlay: `Ctrl+Shift+Space`
-- Stop generation: `Ctrl+.`
-- Regenerate last response: `Ctrl+Shift+R`
-- Input history: `Up / Down` (when the input caret is at the start/end)
+| Action | Shortcut |
+| --- | --- |
+| Toggle overlay | `Ctrl+Space` |
+| Focus overlay | `Ctrl+Shift+Space` |
+| Stop generation | `Ctrl+.` |
+| Regenerate last response | `Ctrl+Shift+R` |
+| Input history | `Up / Down` (caret at start/end) |
 
 ## Chat commands
 
-- `/clear` clears chat history
-- `/corner <top-left|top-right|bottom-left|bottom-right>` moves the overlay
+| Command | Description |
+| --- | --- |
+| `/clear` | Clear chat history |
+| `/corner <bottom-left\|bottom-middle\|bottom-right>` | Move the overlay |
 
 ## Ollama integration (required)
 
 This app does not call Ollama from the frontend. All requests are proxied through
 the Tauri backend. On startup, the backend checks `http://localhost:11434/api/tags`.
+
+Models required by default:
+- `gpt-oss:20b-cloud` (chat)
+- `devstral-small-2:24b-cloud` (vision)
+
+If these are missing, pull them with:
+```bash
+ollama pull gpt-oss:20b-cloud
+ollama pull devstral-small-2:24b-cloud
+```
 
 If Ollama is not reachable, you will see a modal with:
 - Download Ollama
@@ -75,13 +90,16 @@ For local dev, you can still set `OLLAMA_WEB_SEARCH_API_KEY` in `.env.local`.
 
 The app reads and writes a JSON config file at the Tauri app config dir:
 
-- Windows: `%APPDATA%\ai-copilot\config.json`
+| OS | Path |
+| --- | --- |
+| Windows | `%APPDATA%\ai-copilot\config.json` |
+| macOS | `~/Library/Application Support/com.monolabs.ai-copilot/config.json` |
 
 Example:
 
 ```json
 {
-  "corner": "top-right",
+  "corner": "bottom-middle",
   "keybinds": {
     "toggle_overlay": "Ctrl+Space",
     "focus_overlay": "Ctrl+Shift+Space"
@@ -143,11 +161,6 @@ Notes:
 - If you need tools in the Agents SDK path, mirror the registration logic in
   `src/overlay/hooks/useAgentsSdkChat.ts`.
 
-## OCR support
-
-The `capture_screen_text` tool captures the active window only. Windows uses    
-Windows Media OCR and may prompt for a language pack if one is missing.
-
 ## Troubleshooting
 
 - Ollama unreachable:
@@ -165,7 +178,6 @@ Windows Media OCR and may prompt for a language pack if one is missing.
 - The AI runs locally via Ollama. Large models are slow and memory-heavy.
 - Global hotkeys can conflict with other apps. Adjust them in the config.
 - You can close the app by right-clicking the tray icon and selecting "Quit".
-
 
 ## Disclaimer (read this if you plan to hack on it)
 
