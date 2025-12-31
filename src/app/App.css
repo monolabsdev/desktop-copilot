@@ -53,6 +53,7 @@ body[data-view="preferences"] {
     inset: 0;
     display: flex;
     justify-content: center;
+    align-items: center;
 }
 
 .panel-frame {
@@ -64,6 +65,8 @@ body[data-view="preferences"] {
 
 .panel-frame--overlay {
     max-width: 100%;
+    width: auto;
+    height: auto;
     pointer-events: auto;
 }
 

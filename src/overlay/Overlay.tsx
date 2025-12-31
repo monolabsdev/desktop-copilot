@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, PhysicalSize } from "@tauri-apps/api/window";
 import {
   useCallback,
   useEffect,
@@ -25,7 +25,10 @@ import {
   getPanelOpacityRange,
 } from "../shared/platform";
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
-import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";       
+import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
+
+const MIN_OVERLAY_WIDTH = 360;
+const MIN_OVERLAY_HEIGHT = 320;
 
 export function Overlay() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -50,6 +53,7 @@ export function Overlay() {
   const [keybinds, setKeybinds] = useState(
     DEFAULT_OVERLAY_CONFIG.keybinds,
   );
+  const panelFrameRef = useRef<HTMLDivElement | null>(null);
   const panelOpacityRange = useMemo(() => getPanelOpacityRange(), []);
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -116,6 +120,54 @@ export function Overlay() {
   useEffect(() => {
     applyPanelOpacity(panelOpacity);
   }, [applyPanelOpacity, panelOpacity]);
+
+  const adjustOverlayWindowSize = useCallback(async () => {
+    const element = panelFrameRef.current;
+    if (!element) {
+      return;
+    }
+    const devicePixelRatio =
+      typeof window === "undefined" ? 1 : window.devicePixelRatio ?? 1;
+    const rect = element.getBoundingClientRect();
+    const targetWidth = Math.max(
+      MIN_OVERLAY_WIDTH,
+      Math.ceil(rect.width * devicePixelRatio),
+    );
+    const targetHeight = Math.max(
+      MIN_OVERLAY_HEIGHT,
+      Math.ceil(rect.height * devicePixelRatio),
+    );
+
+    try {
+      const currentWindow = await getCurrentWindow();
+      const currentSize = await currentWindow.outerSize();
+      if (
+        currentSize.width === targetWidth &&
+        currentSize.height === targetHeight
+      ) {
+        return;
+      }
+      await currentWindow.setSize(new PhysicalSize(targetWidth, targetHeight));
+    } catch (err) {
+      console.debug("Failed to resize overlay window", err);
+    }
+  }, [panelFrameRef]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const element = panelFrameRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      void adjustOverlayWindowSize();
+    });
+    observer.observe(element);
+    void adjustOverlayWindowSize();
+    return () => observer.disconnect();
+  }, [adjustOverlayWindowSize]);
 
   const startDragging = useCallback(() => {
     getCurrentWindow()
@@ -238,6 +290,7 @@ export function Overlay() {
     regenerateLastResponse,
     canRegenerate,
   } = agentsSdkEnabled ? agentsChat : ollamaChat;
+  const hasMessages = messages.length > 0;
   const inputHistory = useMemo(
     () =>
       messages
@@ -259,24 +312,28 @@ export function Overlay() {
         <PanelStage>
           <PanelFrame
             variant="overlay"
+            ref={panelFrameRef}
             className="overlay-panel"
             onPointerDown={handlePanelPointerDown}
           >
-            <OverlayHeader
-              isBusy={isSending}
-              hasMessages={messages.length > 0}
-              onClearHistory={clearHistory}
-            />
-
-            {/* Messages */}
-            <MessageList
-              messages={messages}
-              isSending={isSending}
-              showThinking={showThinking}
-              ollamaConnected={ollamaConnected}
-              canRegenerate={canRegenerate}
-              onRegenerate={regenerateLastResponse}
-            />
+            {hasMessages && (
+              <>
+                <OverlayHeader
+                  isBusy={isSending}
+                  hasMessages
+                  onClearHistory={clearHistory}
+                />
+                {/* Messages */}
+                <MessageList
+                  messages={messages}
+                  isSending={isSending}
+                  showThinking={showThinking}
+                  ollamaConnected={ollamaConnected}
+                  canRegenerate={canRegenerate}
+                  onRegenerate={regenerateLastResponse}
+                />
+              </>
+            )}
 
             {/* Error */}
             {error && (

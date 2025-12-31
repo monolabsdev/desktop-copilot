@@ -8,14 +8,19 @@ interface PanelRootProps extends React.ComponentProps<"div"> {
   variant?: PanelVariant;
 }
 
-function PanelRoot({ variant = "overlay", className, ...props }: PanelRootProps) {
+const PanelRoot = React.forwardRef<HTMLDivElement, PanelRootProps>(function PanelRoot(
+  { variant = "overlay", className, ...props },
+  ref,
+) {
   return (
     <div
+      ref={ref}
       className={cn("panel-root", `panel-root--${variant}`, className)}
       {...props}
     />
   );
-}
+});
+PanelRoot.displayName = "PanelRoot";
 
 function PanelStage({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("panel-stage", className)} {...props} />;
@@ -25,18 +30,19 @@ interface PanelFrameProps extends React.ComponentProps<"div"> {
   variant?: PanelVariant;
 }
 
-function PanelFrame({
-  variant = "overlay",
-  className,
-  ...props
-}: PanelFrameProps) {
+const PanelFrame = React.forwardRef<HTMLDivElement, PanelFrameProps>(function PanelFrame(
+  { variant = "overlay", className, ...props },
+  ref,
+) {
   return (
     <div
+      ref={ref}
       className={cn("panel-frame", `panel-frame--${variant}`, className)}
       {...props}
     />
   );
-}
+});
+PanelFrame.displayName = "PanelFrame";
 
 function PanelBody({ className, ...props }: React.ComponentProps<"div">) {
   return <div className={cn("panel-body", className)} {...props} />;
