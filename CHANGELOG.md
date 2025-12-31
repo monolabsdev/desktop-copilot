@@ -31,6 +31,7 @@ This development release expands context capture, adds macOS groundwork, and ref
 - This is a development build
 - Features marked experimental may change or be removed
 - Backward compatibility is not guaranteed
+- **macOS builds are not supported yet. macOS support is still under active development and may be unstable or incomplete.**
 
 ---
 
