@@ -6,7 +6,35 @@ Versions marked `dev` indicate unstable development builds.
 
 ---
 
-## [0.2.0-dev.2] Release Candidate
+## [0.2.0-dev.3] 
+This development release expands context capture, adds macOS groundwork, and refines the overlay UI.
+
+### Added
+- Clipboard context for the AI
+- Global keybind listener (experimental)
+- Agents SDK toggle and vision screenshots on macOS
+- OpenAI modules type definitions
+
+### Changed
+- Overlay UI, preferences, and tool handling revamp
+- Message bubble and preferences improvements
+- Default overlay positions refreshed with tool documentation updates
+- README updates, including macOS support status and configuration
+
+### Fixed
+- Reasoning timer counting properly
+- Scroll button showing when already at the bottom
+- Overscroll behavior removal
+- Tauri warnings on macOS
+
+### Notes
+- This is a development build
+- Features marked experimental may change or be removed
+- Backward compatibility is not guaranteed
+
+---
+
+## [0.2.0-dev.2]
 This development release focuses on overlay UX upgrades, chat controls, and tool feedback.
 
 ### Added
@@ -37,7 +65,7 @@ This development release focuses on overlay UX upgrades, chat controls, and tool
 
 ---
 
-## [0.2.0-dev.1] Release Candidate
+## [0.2.0-dev.1]
 This development release consolidates multiple feature additions and UI changes that significantly expand the application beyond the initial `0.1.x` scope.
 
 ### Added
@@ -89,7 +117,7 @@ This development release consolidates multiple feature additions and UI changes 
 
 ---
 
-## [0.1.0] â€“ Initial Development Release
+## [0.1.0] Initial Development Release
 
 ### Added
 - Core application functionality
