@@ -5,12 +5,13 @@ use tauri::{Emitter, Manager, PhysicalPosition, Position, State};
 
 use crate::config;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum OverlayCorner {
     TopLeft,
     TopRight,
     BottomLeft,
+    BottomMiddle,
     BottomRight,
 }
 
@@ -94,6 +95,10 @@ pub fn snap_overlay_to_corner(window: &tauri::WebviewWindow, corner: OverlayCorn
         ),
         OverlayCorner::BottomLeft => (
             area_pos.x,
+            area_pos.y + area_size.height as i32 - window_size.height as i32,
+        ),
+        OverlayCorner::BottomMiddle => (
+            area_pos.x + (area_size.width as i32 - window_size.width as i32) / 2,
             area_pos.y + area_size.height as i32 - window_size.height as i32,
         ),
         OverlayCorner::BottomRight => (

@@ -74,7 +74,7 @@ export type ToolHandlerContext = {
 
 // Register tools here so they automatically appear in the UI and tool routing.
 // Add a tool by:
-// 1) Create a Tool schema in src/overlay/tools/...
+// 1) Copy src/overlay/tools/toolTemplate.ts and define your schema + name.
 // 2) Add a RegisteredTool entry below with handler + labels.
 // 3) Gate it with config via isEnabled (e.g. options.webSearchEnabled).
 // No other UI wiring is needed.
@@ -96,6 +96,29 @@ export type RegisteredTool = {
   isEnabled?: (options?: ToolOptions) => boolean;
   handler: (context: ToolHandlerContext) => Promise<boolean>;
 };
+
+// Example handler skeleton:
+// const exampleTool: RegisteredTool = {
+//   name: EXAMPLE_TOOL_NAME,
+//   tool: EXAMPLE_TOOL_SCHEMA,
+//   displayName: "example tool",
+//   activityLabel: "Running example tool...",
+//   completedLabel: "Example tool done.",
+//   preferences: {
+//     label: "Example tool",
+//     description: "Describe what this tool does.",
+//     defaultEnabled: true,
+//     showInPreferences: true,
+//   },
+//   isEnabled: (options) => isToolEnabled(EXAMPLE_TOOL_NAME, options),
+//   handler: async ({ toolCalls, toolCall, buildToolMessage, streamFollowup }) => {
+//     const args = toolCall?.function?.arguments ?? {};
+//     const result = { ok: true, args };
+//     const toolMessage = buildToolMessage(EXAMPLE_TOOL_NAME, result);
+//     await streamFollowup([], toolCalls, toolMessage, []);
+//     return true;
+//   },
+// };
 
 const CAPTURE_TOOL_NAME = "capture_screen_image";
 const WEB_SEARCH_TOOL_NAME = "web_search";

@@ -1,8 +1,7 @@
 // Allowed overlay anchor points; must match Rust's OverlayCorner enum.
 export const OVERLAY_CORNERS = [
-  "top-left",
-  "top-right",
   "bottom-left",
+  "bottom-middle",
   "bottom-right",
 ] as const;
 
@@ -33,7 +32,7 @@ export type OverlayConfig = {
 // 3) Add serde defaults + Default impls in Rust.
 
 export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
-  corner: "top-right",
+  corner: "bottom-middle",
   keybinds: {
     toggle_overlay: "Ctrl+Space",
     focus_overlay: "Ctrl+Shift+Space",

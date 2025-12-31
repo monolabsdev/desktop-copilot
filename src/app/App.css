@@ -259,13 +259,18 @@ body[data-view="preferences"] {
 }
 
 .chat-input-textarea {
+    --chat-input-min-height: 46px;
+    --chat-input-line-height: 22px;
     width: 100%;
-    min-height: 48px;
+    min-height: var(--chat-input-min-height);
     resize: none;
     background: transparent;
-    padding: 0.7rem 3.25rem 0.7rem 1rem;
+    padding-block: calc(
+        (var(--chat-input-min-height) - var(--chat-input-line-height)) / 2
+    );
+    padding-inline: 1rem 3.25rem;
     font-size: 0.95rem;
-    line-height: 1.5;
+    line-height: var(--chat-input-line-height);
     color: rgba(255, 255, 255, 0.9);
 }
 

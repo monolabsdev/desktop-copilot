@@ -98,7 +98,7 @@ Example:
 ```
 
 Notes:
-- `corner` accepts `top-left`, `top-right`, `bottom-left`, `bottom-right`.      
+- `corner` accepts `bottom-left`, `bottom-middle`, `bottom-right`.
 - `keybinds` lets you customize global shortcuts. Restart the app after editing.
 
 ### Adding custom config settings
@@ -118,15 +118,20 @@ Tools are registered in one place and are automatically available to the UI and
 tool routing.
 
 Steps:
-1. Add a tool schema in `src/overlay/tools/` (see `webSearch.ts` or
-   `captureScreenImage.ts`).
+1. Copy `src/overlay/tools/toolTemplate.ts` to a new file in
+   `src/overlay/tools/`, rename the tool name/schema, and implement your
+   parameters. This only defines the schema the model will call.
 2. Register it in `src/overlay/tools/registry.ts` with:
    - `name` (tool call name)
    - `tool` (schema)
    - `handler` (exec logic + followup)
    - `displayName`/`activityLabel` (UI labels)
    - `isEnabled` (gate via config flags)
-3. Expose a config flag if you want a toggle:
+3. Implement the actual tool functionality (you own the behavior):
+   - If it needs native/system access, add a Tauri command in `src-tauri/src/`
+     and register it in `src-tauri/src/main.rs`.
+   - If it is frontend-only, implement it directly in the tool handler.
+4. Expose a config flag if you want a toggle:
    - `src-tauri/src/config.rs`
    - `src/shared/config.ts`
    - `src/preferences/Preferences.tsx`
@@ -135,6 +140,8 @@ Steps:
 Notes:
 - The registry drives the tool list sent to the model and the local handlers.
 - Tool activity uses your Disclosure UI automatically.
+- If you need tools in the Agents SDK path, mirror the registration logic in
+  `src/overlay/hooks/useAgentsSdkChat.ts`.
 
 ## OCR support
 

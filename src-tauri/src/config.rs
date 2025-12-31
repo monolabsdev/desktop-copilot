@@ -104,7 +104,7 @@ pub struct OverlayConfig {
 impl Default for OverlayConfig {
     fn default() -> Self {
         Self {
-            corner: OverlayCorner::TopRight,
+            corner: OverlayCorner::BottomMiddle,
             keybinds: KeybindConfig::default(),
             appearance: AppearanceConfig::default(),
             tools: ToolConfig::default(),
@@ -156,11 +156,25 @@ pub fn load_overlay_config(app: &AppHandle) -> OverlayConfig {
     let contents = fs::read_to_string(path).ok();
     if let Some(contents) = contents {
         if let Ok(config) = serde_json::from_str::<OverlayConfig>(&contents) {
-            return config;
+            let original_corner = config.corner;
+            let normalized = normalize_corner_config(config);
+            if normalized.corner != original_corner {
+                save_overlay_config(app, &normalized);
+            }
+            return normalized;
         }
     }
 
     OverlayConfig::default()
+}
+
+fn normalize_corner_config(mut config: OverlayConfig) -> OverlayConfig {
+    config.corner = match config.corner {
+        OverlayCorner::TopLeft => OverlayCorner::BottomLeft,
+        OverlayCorner::TopRight => OverlayCorner::BottomRight,
+        other => other,
+    };
+    config
 }
 
 pub fn save_overlay_config(app: &AppHandle, config: &OverlayConfig) {
@@ -189,12 +203,13 @@ pub fn set_overlay_config(
     config: OverlayConfig,
 ) -> Result<(), String> {
     // Persist settings and notify the UI for live updates.
-    save_overlay_config(&app, &config);
-    state.set_corner(config.corner);
+    let normalized = normalize_corner_config(config);
+    save_overlay_config(&app, &normalized);
+    state.set_corner(normalized.corner);
     if let Some(window) = app.webview_windows().get("overlay") {
-        snap_overlay_to_corner(window, config.corner);
+        snap_overlay_to_corner(window, normalized.corner);
     }
-    shortcuts::register_overlay_shortcut(&app, &config);
-    let _ = app.emit("config:updated", config.clone());
+    shortcuts::register_overlay_shortcut(&app, &normalized);
+    let _ = app.emit("config:updated", normalized.clone());
     Ok(())
 }
