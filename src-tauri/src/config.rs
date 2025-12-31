@@ -12,8 +12,14 @@ const CONFIG_FILE: &str = "config.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeybindConfig {
+    #[serde(default = "default_toggle_overlay")]
     pub toggle_overlay: String,
+    #[serde(default = "default_focus_overlay")]
     pub focus_overlay: String,
+    #[serde(default = "default_stop_generation")]
+    pub stop_generation: String,
+    #[serde(default = "default_regenerate_last_response")]
+    pub regenerate_last_response: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,10 +65,28 @@ fn default_agents_sdk_enabled() -> bool {
 impl Default for KeybindConfig {
     fn default() -> Self {
         Self {
-            toggle_overlay: "Ctrl+Space".into(),
-            focus_overlay: "Ctrl+Shift+Space".into(),
+            toggle_overlay: default_toggle_overlay(),
+            focus_overlay: default_focus_overlay(),
+            stop_generation: default_stop_generation(),
+            regenerate_last_response: default_regenerate_last_response(),
         }
     }
+}
+
+fn default_toggle_overlay() -> String {
+    "Ctrl+Space".into()
+}
+
+fn default_focus_overlay() -> String {
+    "Ctrl+Shift+Space".into()
+}
+
+fn default_stop_generation() -> String {
+    "Ctrl+.".into()
+}
+
+fn default_regenerate_last_response() -> String {
+    "Ctrl+Shift+R".into()
 }
 
 impl Default for ToolConfig {

@@ -43,6 +43,9 @@ export function Overlay() {
   const [toolToggles, setToolToggles] = useState<Record<string, boolean>>(
     DEFAULT_OVERLAY_CONFIG.tools.tool_toggles,
   );
+  const [keybinds, setKeybinds] = useState(
+    DEFAULT_OVERLAY_CONFIG.keybinds,
+  );
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const consentResolver = useRef<
@@ -65,6 +68,7 @@ export function Overlay() {
     setWebSearchEnabled(config.tools.web_search_enabled);
     setAgentsSdkEnabled(config.tools.agents_sdk_enabled);
     setToolToggles(config.tools.tool_toggles ?? {});
+    setKeybinds(config.keybinds);
   }, []);
 
   useTauriEvent("overlay:shown", () => {
@@ -236,6 +240,7 @@ export function Overlay() {
 
 
   useOverlayHotkeys({
+    keybinds,
     onStop: cancelSend,
     onRegenerate: regenerateLastResponse,
   });

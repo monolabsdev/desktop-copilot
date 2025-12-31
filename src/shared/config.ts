@@ -13,6 +13,8 @@ export type OverlayConfig = {
   keybinds: {
     toggle_overlay: string;
     focus_overlay: string;
+    stop_generation: string;
+    regenerate_last_response: string;
   };
   appearance: {
     panel_opacity: number;
@@ -36,6 +38,8 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   keybinds: {
     toggle_overlay: "Ctrl+Space",
     focus_overlay: "Ctrl+Shift+Space",
+    stop_generation: "Ctrl+.",
+    regenerate_last_response: "Ctrl+Shift+R",
   },
   appearance: {
     panel_opacity: 0.85,

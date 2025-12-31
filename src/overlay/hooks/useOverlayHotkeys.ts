@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { matchesKeybinding } from "@/shared/keybindings";
 
 type OverlayHotkeysOptions = {
+  keybinds?: {
+    stop_generation?: string;
+    regenerate_last_response?: string;
+  };
   onStop?: () => void;
   onRegenerate?: () => void;
 };
@@ -15,18 +20,18 @@ export function useOverlayHotkeys(options: OverlayHotkeysOptions = {}) {
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.key === ".") {
+      if (matchesKeybinding(e, options.keybinds?.stop_generation)) {
         e.preventDefault();
         options.onStop?.();
         return;
       }
 
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "r") {
+      if (matchesKeybinding(e, options.keybinds?.regenerate_last_response)) {
         e.preventDefault();
         options.onRegenerate?.();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [options.onRegenerate, options.onStop]);
+  }, [options.keybinds?.regenerate_last_response, options.keybinds?.stop_generation, options.onRegenerate, options.onStop]);
 }

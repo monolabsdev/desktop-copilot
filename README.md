@@ -44,6 +44,10 @@ npm run tauri build
 | Regenerate last response | `Ctrl+Shift+R` |
 | Input history | `Up / Down` (caret at start/end) |
 
+Shortcuts are editable in Preferences: click a field and press keys to set it.
+Backspace clears the field (empty disables). On macOS, some combos are reserved
+by the system (Cmd+Space for Spotlight, Ctrl+Space for input sources).
+
 ## Chat commands
 
 | Command | Description |
@@ -102,7 +106,9 @@ Example:
   "corner": "bottom-middle",
   "keybinds": {
     "toggle_overlay": "Ctrl+Space",
-    "focus_overlay": "Ctrl+Shift+Space"
+    "focus_overlay": "Ctrl+Shift+Space",
+    "stop_generation": "Ctrl+.",
+    "regenerate_last_response": "Ctrl+Shift+R"
   },
   "appearance": {
     "panel_opacity": 0.85,

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { KeybindInput } from "@/components/ui/keybind-input";
 import {
   Select,
   SelectContent,
@@ -33,6 +34,7 @@ import {
   type OverlayCorner,
 } from "../shared/config";
 import { TOOL_REGISTRY } from "../overlay/tools/registry";
+import { useTauriEvent } from "../shared/hooks/useTauriEvent";
 
 type WebSearchKeyStatus = {
   has_key: boolean;
@@ -55,6 +57,9 @@ export function Preferences() {
     string | null
   >(null);
   const [isSavingWebSearchKey, setIsSavingWebSearchKey] = useState(false);
+  const [keybindErrors, setKeybindErrors] = useState<Record<string, string>>(
+    {},
+  );
 
   useEffect(() => {
     const clamped = Math.min(1, Math.max(0.6, config.appearance.panel_opacity));
@@ -106,13 +111,51 @@ export function Preferences() {
       });
   }, []);
 
+  useTauriEvent<{ key: string; error: string }>(
+    "shortcuts:registration_failed",
+    (event) => {
+      const key = event.payload.key;
+      setKeybindErrors((prev) => {
+        const next = { ...prev };
+        if (config.keybinds.toggle_overlay === key) {
+          next.toggle_overlay = event.payload.error;
+        }
+        if (config.keybinds.focus_overlay === key) {
+          next.focus_overlay = event.payload.error;
+        }
+        return next;
+      });
+    },
+  );
+
   const setCorner = (corner: OverlayCorner) =>
     setConfig((prev) => ({ ...prev, corner }));
-  const setKeybind = (key: "toggle_overlay" | "focus_overlay", value: string) =>
+  const setKeybind = (
+    key:
+      | "toggle_overlay"
+      | "focus_overlay"
+      | "stop_generation"
+      | "regenerate_last_response",
+    value: string,
+  ) =>
     setConfig((prev) => ({
       ...prev,
       keybinds: { ...prev.keybinds, [key]: value },
     }));
+
+  const clearKeybindError = (key: keyof OverlayConfig["keybinds"]) => {
+    setKeybindErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const resetKeybindsToDefaults = () => {
+    setConfig((prev) => ({ ...prev, keybinds: DEFAULT_OVERLAY_CONFIG.keybinds }));
+    setKeybindErrors({});
+  };
   // When adding a new config field, add a setter and UI control here so it
   // stays in sync with DEFAULT_OVERLAY_CONFIG and the Rust config structs.
   const setPanelOpacity = (value: number) =>
@@ -424,28 +467,78 @@ export function Preferences() {
 
             <PanelStack gap="lg">
               <PanelSectionTitle>Shortcuts</PanelSectionTitle>
+              <div className="panel-subtle">
+                Click a field and press keys to set a shortcut. Backspace clears
+                it. Empty shortcuts are disabled. Some macOS combinations are
+                reserved by the system (Cmd+Space, Ctrl+Space) and cannot be
+                registered.
+              </div>
               <PanelStack gap="sm">
                 <PanelFieldLabel>Toggle overlay</PanelFieldLabel>
-                <Input
+                <KeybindInput
                   aria-label="Toggle overlay shortcut"
                   value={config.keybinds.toggle_overlay}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setKeybind("toggle_overlay", e.target.value)
-                  }
+                  onChange={(value: string) => {
+                    clearKeybindError("toggle_overlay");
+                    setKeybind("toggle_overlay", value);
+                  }}
                   className="overlay-input"
                 />
+                {keybindErrors.toggle_overlay && (
+                  <div className="panel-status">
+                    {keybindErrors.toggle_overlay}
+                  </div>
+                )}
               </PanelStack>
               <PanelStack gap="sm">
                 <PanelFieldLabel>Focus overlay</PanelFieldLabel>
-                <Input
+                <KeybindInput
                   aria-label="Focus overlay shortcut"
                   value={config.keybinds.focus_overlay}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setKeybind("focus_overlay", e.target.value)
+                  onChange={(value: string) => {
+                    clearKeybindError("focus_overlay");
+                    setKeybind("focus_overlay", value);
+                  }}
+                  className="overlay-input"
+                />
+                {keybindErrors.focus_overlay && (
+                  <div className="panel-status">
+                    {keybindErrors.focus_overlay}
+                  </div>
+                )}
+              </PanelStack>
+              <PanelStack gap="sm">
+                <PanelFieldLabel>Stop generation</PanelFieldLabel>
+                <KeybindInput
+                  aria-label="Stop generation shortcut"
+                  value={config.keybinds.stop_generation}
+                  onChange={(value: string) =>
+                    setKeybind("stop_generation", value)
                   }
                   className="overlay-input"
                 />
               </PanelStack>
+              <PanelStack gap="sm">
+                <PanelFieldLabel>Regenerate last response</PanelFieldLabel>
+                <KeybindInput
+                  aria-label="Regenerate last response shortcut"
+                  value={config.keybinds.regenerate_last_response}
+                  onChange={(value: string) =>
+                    setKeybind("regenerate_last_response", value)
+                  }
+                  className="overlay-input"
+                />
+              </PanelStack>
+              <div>
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={resetKeybindsToDefaults}
+                  className="overlay-button overlay-button--ghost"
+                >
+                  Reset shortcuts to defaults
+                </Button>
+              </div>
             </PanelStack>
 
           </PanelBody>
