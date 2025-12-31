@@ -41,6 +41,8 @@ type WebSearchKeyStatus = {
   source?: string | null;
 };
 
+type PreferencesTab = "general" | "tools" | "shortcuts";
+
 export function Preferences() {
   const [config, setConfig] = useState<OverlayConfig>(DEFAULT_OVERLAY_CONFIG);
   const [initialConfig, setInitialConfig] = useState<OverlayConfig>(
@@ -60,6 +62,7 @@ export function Preferences() {
   const [keybindErrors, setKeybindErrors] = useState<Record<string, string>>(
     {},
   );
+  const [activeTab, setActiveTab] = useState<PreferencesTab>("general");
 
   useEffect(() => {
     const clamped = Math.min(1, Math.max(0.6, config.appearance.panel_opacity));
@@ -292,6 +295,11 @@ export function Preferences() {
     return fallback;
   };
 
+  const tabs: { id: PreferencesTab; label: string }[] = [
+    { id: "general", label: "General" },
+    { id: "tools", label: "Tools" },
+    { id: "shortcuts", label: "Shortcuts" },
+  ];
 
   return (
     <PanelRoot variant="preferences">
@@ -309,237 +317,284 @@ export function Preferences() {
               </PanelSubtitle>
             </div>
 
-            <PanelStack gap="lg">
-              <PanelSectionTitle>Overlay position</PanelSectionTitle>
-              <Select
-                value={config.corner}
-                onValueChange={(value: string) =>
-                  setCorner(value as OverlayCorner)
-                }
+            <div className="preferences-tabs" role="tablist" aria-label="Preferences">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  id={`preferences-tab-${tab.id}`}
+                  role="tab"
+                  type="button"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`preferences-panel-${tab.id}`}
+                  className={
+                    activeTab === tab.id
+                      ? "preferences-tab preferences-tab--active"
+                      : "preferences-tab"
+                  }
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {activeTab === "general" && (
+              <div
+                id="preferences-panel-general"
+                role="tabpanel"
+                aria-labelledby="preferences-tab-general"
+                className="preferences-tab-panel"
               >
-                <SelectTrigger className="overlay-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {OVERLAY_CORNERS.map((corner) => (
-                    <SelectItem key={corner} value={corner}>
-                      {corner.replace("-", " ")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </PanelStack>
-
-            <PanelStack gap="md">
-              <PanelSectionTitle>Appearance</PanelSectionTitle>
-              <PanelStack gap="sm">
-                <PanelRow className="items-center justify-between">
-                  <PanelFieldLabel>Show reasoning boxes</PanelFieldLabel>
-                  <Switch
-                    checked={config.appearance.show_thinking}
-                    onCheckedChange={(value: boolean) =>
-                      setShowThinking(value)
-                    }
-                  />
-                </PanelRow>
-              </PanelStack>
-              <PanelStack gap="sm">
-                <PanelFieldLabel>Panel opacity</PanelFieldLabel>
-                <PanelRow>
-                  <Slider
-                    min={0.6}
-                    max={1}
-                    step={0.05}
-                    value={[config.appearance.panel_opacity]}
-                    onValueChange={(value: number[]) => {
-                      const next = value[0];
-                      if (typeof next === "number") {
-                        setPanelOpacity(next);
+                <PanelStack gap="lg">
+                  <PanelStack gap="lg">
+                    <PanelSectionTitle>Overlay position</PanelSectionTitle>
+                    <Select
+                      value={config.corner}
+                      onValueChange={(value: string) =>
+                        setCorner(value as OverlayCorner)
                       }
-                    }}
-                    className="overlay-range"
-                  />
-                  <div className="panel-value">
-                    {Math.round(config.appearance.panel_opacity * 100)}%
-                  </div>
-                </PanelRow>
-              </PanelStack>
-            </PanelStack>
-
-            <PanelStack gap="md">
-              <PanelSectionTitle>Tools</PanelSectionTitle>
-              <PanelStack gap="sm">
-                {toolPreferences.map((tool) => (
-                  <PanelRow
-                    key={tool.name}
-                    className="items-start justify-between gap-3"
-                  >
-                    <div className="panel-stack panel-stack--sm">
-                      <div className="panel-row panel-row--sm items-center">
-                        <PanelFieldLabel>{tool.label}</PanelFieldLabel>
-                        {tool.statuses.map((status) => (
-                          <StatusChip
-                            key={`${tool.name}-${status}`}
-                            variant={status}
-                            casing="normal"
-                          />
+                    >
+                      <SelectTrigger className="overlay-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OVERLAY_CORNERS.map((corner) => (
+                          <SelectItem key={corner} value={corner}>
+                            {corner.replace("-", " ")}
+                          </SelectItem>
                         ))}
-                      </div>
-                      {tool.description && (
-                        <div className="panel-subtle">
-                          {tool.description}
+                      </SelectContent>
+                    </Select>
+                  </PanelStack>
+
+                  <PanelStack gap="md">
+                    <PanelSectionTitle>Appearance</PanelSectionTitle>
+                    <PanelStack gap="sm">
+                      <PanelRow className="items-center justify-between">
+                        <PanelFieldLabel>Show reasoning boxes</PanelFieldLabel>
+                        <Switch
+                          checked={config.appearance.show_thinking}
+                          onCheckedChange={(value: boolean) =>
+                            setShowThinking(value)
+                          }
+                        />
+                      </PanelRow>
+                    </PanelStack>
+                    <PanelStack gap="sm">
+                      <PanelFieldLabel>Panel opacity</PanelFieldLabel>
+                      <PanelRow>
+                        <Slider
+                          min={0.6}
+                          max={1}
+                          step={0.05}
+                          value={[config.appearance.panel_opacity]}
+                          onValueChange={(value: number[]) => {
+                            const next = value[0];
+                            if (typeof next === "number") {
+                              setPanelOpacity(next);
+                            }
+                          }}
+                          className="overlay-range"
+                        />
+                        <div className="panel-value">
+                          {Math.round(config.appearance.panel_opacity * 100)}%
                         </div>
-                      )}
-                    </div>
-                    <Switch
-                      checked={resolveToolToggle(
-                        tool.name,
-                        tool.defaultEnabled,
-                      )}
-                      onCheckedChange={(value: boolean) =>
-                        setToolToggle(tool.name, value)
-                      }
-                    />
-                  </PanelRow>
-                ))}
-                <PanelRow className="items-start justify-between gap-3">
-                  <div className="panel-stack panel-stack--sm">
-                    <div className="panel-row panel-row--sm items-center">
-                      <PanelFieldLabel>Agents SDK</PanelFieldLabel>
-                      <StatusChip variant="experimental" casing="normal" />
-                    </div>
-                    <div className="panel-subtle">
-                      Enable the multi-agent runtime for advanced workflows.
-                    </div>
+                      </PanelRow>
+                    </PanelStack>
+                  </PanelStack>
+                </PanelStack>
+              </div>
+            )}
+
+            {activeTab === "tools" && (
+              <div
+                id="preferences-panel-tools"
+                role="tabpanel"
+                aria-labelledby="preferences-tab-tools"
+                className="preferences-tab-panel"
+              >
+                <PanelStack gap="md">
+                  <PanelStack gap="sm">
+                    {toolPreferences.map((tool) => (
+                      <PanelRow
+                        key={tool.name}
+                        className="items-start justify-between gap-3"
+                      >
+                        <div className="panel-stack panel-stack--sm">
+                          <div className="panel-row panel-row--sm items-center">
+                            <PanelFieldLabel>{tool.label}</PanelFieldLabel>
+                            {tool.statuses.map((status) => (
+                              <StatusChip
+                                key={`${tool.name}-${status}`}
+                                variant={status}
+                                casing="normal"
+                              />
+                            ))}
+                          </div>
+                          {tool.description && (
+                            <div className="panel-subtle">
+                              {tool.description}
+                            </div>
+                          )}
+                        </div>
+                        <Switch
+                          checked={resolveToolToggle(
+                            tool.name,
+                            tool.defaultEnabled,
+                          )}
+                          onCheckedChange={(value: boolean) =>
+                            setToolToggle(tool.name, value)
+                          }
+                        />
+                      </PanelRow>
+                    ))}
+                    <PanelRow className="items-start justify-between gap-3">
+                      <div className="panel-stack panel-stack--sm">
+                        <div className="panel-row panel-row--sm items-center">
+                          <PanelFieldLabel>Agents SDK</PanelFieldLabel>
+                          <StatusChip variant="experimental" casing="normal" />
+                        </div>
+                        <div className="panel-subtle">
+                          Enable the multi-agent runtime for advanced workflows.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={config.tools.agents_sdk_enabled}
+                        onCheckedChange={(value: boolean) =>
+                          setAgentsSdkEnabled(value)
+                        }
+                      />
+                    </PanelRow>
+                  </PanelStack>
+                  {toolPreferences.some((tool) => tool.requiresWebSearchKey) && (
+                    <PanelStack gap="sm">
+                      <PanelFieldLabel>Web search API key</PanelFieldLabel>
+                      <Input
+                        type="password"
+                        aria-label="Web search API key"
+                        value={webSearchKey}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                          setWebSearchKey(e.target.value)
+                        }
+                        className="overlay-input"
+                        placeholder="Enter OLLAMA_WEB_SEARCH_API_KEY"
+                      />
+                      <PanelRow className="items-center justify-between gap-2">
+                        <div className="panel-subtle">
+                          {webSearchKeyStatus?.has_key
+                            ? `Key stored (${webSearchKeyStatus.source ?? "saved"}).`
+                            : "No key saved."}
+                        </div>
+                        <div className="panel-row panel-row--sm">
+                          <Button
+                            size="sm"
+                            disabled={isSavingWebSearchKey}
+                            onClick={handleSaveWebSearchKey}
+                            className="overlay-button"
+                          >
+                            Save key
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={isSavingWebSearchKey}
+                            onClick={handleClearWebSearchKey}
+                            className="overlay-button overlay-button--ghost"
+                          >
+                            Clear key
+                          </Button>
+                        </div>
+                      </PanelRow>
+                      <div className="panel-status">
+                        {webSearchKeyStatusText ?? " "}
+                      </div>
+                    </PanelStack>
+                  )}
+                </PanelStack>
+              </div>
+            )}
+
+            {activeTab === "shortcuts" && (
+              <div
+                id="preferences-panel-shortcuts"
+                role="tabpanel"
+                aria-labelledby="preferences-tab-shortcuts"
+                className="preferences-tab-panel"
+              >
+                <PanelStack gap="lg">
+                  <div className="panel-subtle">
+                    Click a field and press keys to set a shortcut. Backspace
+                    clears it. Some macOS combinations are reserved (Cmd+Space,
+                    Ctrl+Space).
                   </div>
-                  <Switch
-                    checked={config.tools.agents_sdk_enabled}
-                    onCheckedChange={(value: boolean) =>
-                      setAgentsSdkEnabled(value)
-                    }
-                  />
-                </PanelRow>
-              </PanelStack>
-              {toolPreferences.some((tool) => tool.requiresWebSearchKey) && (
-                <PanelStack gap="sm">
-                  <PanelFieldLabel>Web search API key</PanelFieldLabel>
-                  <Input
-                    type="password"
-                    aria-label="Web search API key"
-                    value={webSearchKey}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                      setWebSearchKey(e.target.value)
-                    }
-                    className="overlay-input"
-                    placeholder="Enter OLLAMA_WEB_SEARCH_API_KEY"
-                  />
-                  <PanelRow className="items-center justify-between gap-2">
-                    <div className="panel-subtle">
-                      {webSearchKeyStatus?.has_key
-                        ? `Key stored (${webSearchKeyStatus.source ?? "saved"}).`
-                        : "No key saved."}
-                    </div>
-                    <div className="panel-row panel-row--sm">
-                      <Button
-                        size="sm"
-                        disabled={isSavingWebSearchKey}
-                        onClick={handleSaveWebSearchKey}
-                        className="overlay-button"
-                      >
-                        Save key
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={isSavingWebSearchKey}
-                        onClick={handleClearWebSearchKey}
-                        className="overlay-button overlay-button--ghost"
-                      >
-                        Clear key
-                      </Button>
-                    </div>
-                  </PanelRow>
-                  <div className="panel-status">
-                    {webSearchKeyStatusText ?? " "}
+                  <PanelStack gap="sm">
+                    <PanelFieldLabel>Toggle overlay</PanelFieldLabel>
+                    <KeybindInput
+                      aria-label="Toggle overlay shortcut"
+                      value={config.keybinds.toggle_overlay}
+                      onChange={(value: string) => {
+                        clearKeybindError("toggle_overlay");
+                        setKeybind("toggle_overlay", value);
+                      }}
+                      className="overlay-input"
+                    />
+                    {keybindErrors.toggle_overlay && (
+                      <div className="panel-status">
+                        {keybindErrors.toggle_overlay}
+                      </div>
+                    )}
+                  </PanelStack>
+                  <PanelStack gap="sm">
+                    <PanelFieldLabel>Focus overlay</PanelFieldLabel>
+                    <KeybindInput
+                      aria-label="Focus overlay shortcut"
+                      value={config.keybinds.focus_overlay}
+                      onChange={(value: string) => {
+                        clearKeybindError("focus_overlay");
+                        setKeybind("focus_overlay", value);
+                      }}
+                      className="overlay-input"
+                    />
+                    {keybindErrors.focus_overlay && (
+                      <div className="panel-status">
+                        {keybindErrors.focus_overlay}
+                      </div>
+                    )}
+                  </PanelStack>
+                  <PanelStack gap="sm">
+                    <PanelFieldLabel>Stop generation</PanelFieldLabel>
+                    <KeybindInput
+                      aria-label="Stop generation shortcut"
+                      value={config.keybinds.stop_generation}
+                      onChange={(value: string) =>
+                        setKeybind("stop_generation", value)
+                      }
+                      className="overlay-input"
+                    />
+                  </PanelStack>
+                  <PanelStack gap="sm">
+                    <PanelFieldLabel>Regenerate last response</PanelFieldLabel>
+                    <KeybindInput
+                      aria-label="Regenerate last response shortcut"
+                      value={config.keybinds.regenerate_last_response}
+                      onChange={(value: string) =>
+                        setKeybind("regenerate_last_response", value)
+                      }
+                      className="overlay-input"
+                    />
+                  </PanelStack>
+                  <div>
+                    <Button
+                      size="sm"
+                      type="button"
+                      onClick={resetKeybindsToDefaults}
+                      className="overlay-button overlay-button--ghost"
+                    >
+                      Reset shortcuts to defaults
+                    </Button>
                   </div>
                 </PanelStack>
-              )}
-            </PanelStack>
-
-            <PanelStack gap="lg">
-              <PanelSectionTitle>Shortcuts</PanelSectionTitle>
-              <div className="panel-subtle">
-                Click a field and press keys to set a shortcut. Backspace clears
-                it. Empty shortcuts are disabled. Some macOS combinations are
-                reserved by the system (Cmd+Space, Ctrl+Space) and cannot be
-                registered.
               </div>
-              <PanelStack gap="sm">
-                <PanelFieldLabel>Toggle overlay</PanelFieldLabel>
-                <KeybindInput
-                  aria-label="Toggle overlay shortcut"
-                  value={config.keybinds.toggle_overlay}
-                  onChange={(value: string) => {
-                    clearKeybindError("toggle_overlay");
-                    setKeybind("toggle_overlay", value);
-                  }}
-                  className="overlay-input"
-                />
-                {keybindErrors.toggle_overlay && (
-                  <div className="panel-status">
-                    {keybindErrors.toggle_overlay}
-                  </div>
-                )}
-              </PanelStack>
-              <PanelStack gap="sm">
-                <PanelFieldLabel>Focus overlay</PanelFieldLabel>
-                <KeybindInput
-                  aria-label="Focus overlay shortcut"
-                  value={config.keybinds.focus_overlay}
-                  onChange={(value: string) => {
-                    clearKeybindError("focus_overlay");
-                    setKeybind("focus_overlay", value);
-                  }}
-                  className="overlay-input"
-                />
-                {keybindErrors.focus_overlay && (
-                  <div className="panel-status">
-                    {keybindErrors.focus_overlay}
-                  </div>
-                )}
-              </PanelStack>
-              <PanelStack gap="sm">
-                <PanelFieldLabel>Stop generation</PanelFieldLabel>
-                <KeybindInput
-                  aria-label="Stop generation shortcut"
-                  value={config.keybinds.stop_generation}
-                  onChange={(value: string) =>
-                    setKeybind("stop_generation", value)
-                  }
-                  className="overlay-input"
-                />
-              </PanelStack>
-              <PanelStack gap="sm">
-                <PanelFieldLabel>Regenerate last response</PanelFieldLabel>
-                <KeybindInput
-                  aria-label="Regenerate last response shortcut"
-                  value={config.keybinds.regenerate_last_response}
-                  onChange={(value: string) =>
-                    setKeybind("regenerate_last_response", value)
-                  }
-                  className="overlay-input"
-                />
-              </PanelStack>
-              <div>
-                <Button
-                  size="sm"
-                  type="button"
-                  onClick={resetKeybindsToDefaults}
-                  className="overlay-button overlay-button--ghost"
-                >
-                  Reset shortcuts to defaults
-                </Button>
-              </div>
-            </PanelStack>
+            )}
 
           </PanelBody>
 

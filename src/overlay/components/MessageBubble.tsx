@@ -114,9 +114,7 @@ const markdownComponents = {
     </th>
   ),
   td: ({ children }: ComponentPropsWithoutRef<"td">) => (
-    <td className="border border-white/10 px-2 py-1 align-top">
-      {children}
-    </td>
+    <td className="border border-white/10 px-2 py-1 align-top">{children}</td>
   ),
 };
 
@@ -279,16 +277,18 @@ function MessageBubbleComponent({
               >
                 Thinking...
               </TextShimmer>
+            ) : thinkingDurationLabel ? (
+              `Thought for ${thinkingDurationLabel}.`
             ) : (
-              thinkingDurationLabel
-                ? `Thought for ${thinkingDurationLabel}.`
-                : "Thought."
+              "Thought."
             )}
           </ChainOfThoughtHeader>
           <ChainOfThoughtContent>
             <ChainOfThoughtStep
               label="Reasoning"
-              status={isStreaming && !thinkingDurationLabel ? "active" : "complete"}
+              status={
+                isStreaming && !thinkingDurationLabel ? "active" : "complete"
+              }
             >
               {thinking && (
                 <div className="leading-relaxed text-white/70">
