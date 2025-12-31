@@ -3,14 +3,23 @@ import remarkGfm from "remark-gfm";
 import { memo, useMemo, type ComponentPropsWithoutRef } from "react";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import { Loader } from "@/components/ui/loader";
+import { Button } from "@/components/ui/button";
 import type { Message } from "ollama";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Disclosure } from "@/components/ui/disclosure";
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtImage,
+  ChainOfThoughtStep,
+} from "@/components/ui/chain-of-thought";
+import { isToolActivityShimmer } from "../tools/registry";
+import { RotateCcw } from "lucide-react";
 
 type MessageWithImages = Message & {
   thinking?: string;
   thinkingDurationMs?: number;
-  toolActivity?: string;
+  toolActivity?: string | string[];
   imageMime?: string;
   imagePath?: string;
   imagePreviewBase64?: string;
@@ -20,6 +29,8 @@ type MessageWithImages = Message & {
 interface Props {
   message: MessageWithImages;
   showThinking: boolean;
+  showRegenerate?: boolean;
+  onRegenerate?: () => void;
 }
 
 const markdownComponents = {
@@ -118,19 +129,55 @@ function formatDuration(ms: number) {
   return `${minutes}m ${remainder}s`;
 }
 
-function MessageBubbleComponent({ message, showThinking }: Props) {
+function normalizeToolActivities(activity?: string | string[]) {
+  if (!activity) return [];
+  const items = Array.isArray(activity) ? activity : [activity];
+  return items.map((item) => item.trim()).filter(Boolean);
+}
+
+function buildToolEntries(activities: string[], hasScreenshot: boolean) {
+  const entries = activities.map((label) => ({
+    key: label,
+    label,
+    shimmer: isToolActivityShimmer(label),
+    showImage: false,
+  }));
+  if (!hasScreenshot) return entries;
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    if (entries[i].label.toLowerCase().includes("screen")) {
+      entries[i].showImage = true;
+      return entries;
+    }
+  }
+  return [
+    ...entries,
+    {
+      key: "Captured screen",
+      label: "Captured screen.",
+      shimmer: false,
+      showImage: true,
+    },
+  ];
+}
+
+function MessageBubbleComponent({
+  message,
+  showThinking,
+  showRegenerate = false,
+  onRegenerate,
+}: Props) {
   const isUser = message.role === "user";
   const label = isUser ? "You" : "AI";
   const thinking =
     !isUser && showThinking ? message.thinking?.trim() : undefined;
-  const toolActivity = !isUser ? message.toolActivity?.trim() : undefined;
+  const toolActivities = !isUser
+    ? normalizeToolActivities(message.toolActivity)
+    : [];
   const thinkingDurationMs = !isUser ? message.thinkingDurationMs : undefined;
   const content = message.content?.trim() ?? "";
   const isStreaming =
     typeof (message as { streamId?: number }).streamId === "number";
   const showThinkingRow = !isUser && showThinking && !!thinking;
-  const showToolRow = !isUser && !!toolActivity;
-  const showContent = isUser || content.length > 0;
   const images = message.images ?? [];
   const imageMime = message.imageMime ?? "image/png";
   const imagePath = message.imagePath;
@@ -144,39 +191,88 @@ function MessageBubbleComponent({ message, showThinking }: Props) {
       return null;
     }
   }, [imagePath]);
+  const hasInlineImage =
+    !!imagePreviewBase64 || !!imageUrl || images.length > 0;
+  const showToolRow = !isUser && (toolActivities.length > 0 || hasInlineImage);
+  const showContent = isUser || content.length > 0;
   const thinkingDurationLabel =
     thinkingDurationMs && thinkingDurationMs > 0
       ? formatDuration(thinkingDurationMs)
       : null;
+  const toolEntries = buildToolEntries(toolActivities, hasInlineImage);
 
   return (
     <div className="space-y-2">
       <div className="text-[11px] tracking-[0.12em] text-white/35">{label}</div>
       {showToolRow && (
-        <Disclosure
-          trigger={
-            <div className="text-[11px] tracking-[0.12em] text-white/40">
-              Tool activity
-            </div>
-          }
-          defaultOpen
-          autoCloseMs={4000}
-        >
-          <div className="leading-relaxed text-white/65">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={markdownComponents}
-              className="markdown-body"
+        <div className="not-prose max-w-prose space-y-3">
+          {toolEntries.map((entry, index) => (
+            <ChainOfThought
+              key={`${entry.key}-${index}`}
+              defaultOpen={entry.showImage}
             >
-              {toolActivity}
-            </ReactMarkdown>
-          </div>
-        </Disclosure>
+              <ChainOfThoughtHeader
+                collapsible={entry.showImage}
+                showChevron={entry.showImage}
+              >
+                {entry.shimmer ? (
+                  <TextShimmer
+                    className="font-mono text-sm [--base-color:#cbd5f5] [--base-gradient-color:#ffffff]"
+                    duration={1}
+                  >
+                    {entry.label}
+                  </TextShimmer>
+                ) : (
+                  entry.label
+                )}
+              </ChainOfThoughtHeader>
+              {entry.showImage && (
+                <ChainOfThoughtContent>
+                  <ChainOfThoughtImage caption="Screenshot">
+                    {imagePreviewBase64 && (
+                      <img
+                        src={`data:${imagePreviewMime};base64,${imagePreviewBase64}`}
+                        alt="Screenshot"
+                        loading="eager"
+                        decoding="async"
+                        data-no-drag
+                        className="w-full rounded-md border border-white/10"
+                      />
+                    )}
+                    {!imagePreviewBase64 && imageUrl && (
+                      <img
+                        src={imageUrl}
+                        alt="Screenshot"
+                        loading="eager"
+                        decoding="async"
+                        data-no-drag
+                        className="w-full rounded-md border border-white/10"
+                      />
+                    )}
+                    {!imagePreviewBase64 &&
+                      !imageUrl &&
+                      images.map((image, index) => (
+                        <img
+                          key={`${label}-image-${index}`}
+                          src={`data:${imageMime};base64,${image}`}
+                          alt="Screenshot"
+                          loading="eager"
+                          decoding="async"
+                          data-no-drag
+                          className="w-full rounded-md border border-white/10"
+                        />
+                      ))}
+                  </ChainOfThoughtImage>
+                </ChainOfThoughtContent>
+              )}
+            </ChainOfThought>
+          ))}
+        </div>
       )}
       {showThinkingRow && (
-        <Disclosure
-          trigger={
-            isStreaming && !thinkingDurationLabel ? (
+        <ChainOfThought defaultOpen>
+          <ChainOfThoughtHeader>
+            {isStreaming && !thinkingDurationLabel ? (
               <TextShimmer
                 className="font-mono text-sm [--base-color:#cbd5f5] [--base-gradient-color:#ffffff]"
                 duration={1}
@@ -184,28 +280,30 @@ function MessageBubbleComponent({ message, showThinking }: Props) {
                 Thinking...
               </TextShimmer>
             ) : (
-              <div className="text-[11px] tracking-[0.12em] text-white/40">
-                {thinkingDurationLabel
-                  ? `Thought for ${thinkingDurationLabel}.`
-                  : "Thought."}
-              </div>
-            )
-          }
-          defaultOpen
-          autoCloseMs={isStreaming ? undefined : 5000}
-        >
-          {thinking && (
-            <div className="leading-relaxed text-white/70">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={markdownComponents}
-                className="markdown-body"
-              >
-                {thinking}
-              </ReactMarkdown>
-            </div>
-          )}
-        </Disclosure>
+              thinkingDurationLabel
+                ? `Thought for ${thinkingDurationLabel}.`
+                : "Thought."
+            )}
+          </ChainOfThoughtHeader>
+          <ChainOfThoughtContent>
+            <ChainOfThoughtStep
+              label="Reasoning"
+              status={isStreaming && !thinkingDurationLabel ? "active" : "complete"}
+            >
+              {thinking && (
+                <div className="leading-relaxed text-white/70">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                    className="markdown-body"
+                  >
+                    {thinking}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </ChainOfThoughtStep>
+          </ChainOfThoughtContent>
+        </ChainOfThought>
       )}
       {showContent && (
         <div className="text-sm text-white/85 leading-relaxed">
@@ -216,52 +314,6 @@ function MessageBubbleComponent({ message, showThinking }: Props) {
           >
             {content}
           </ReactMarkdown>
-          {(imagePreviewBase64 || imageUrl || images.length > 0) && (
-            <Disclosure
-              trigger={
-                <div className="text-[11px] tracking-[0.12em] text-white/45">
-                  Screenshot
-                </div>
-              }
-              autoCloseMs={4000}
-            >
-              <div className="space-y-2">
-                {imagePreviewBase64 && (
-                  <img
-                    src={`data:${imagePreviewMime};base64,${imagePreviewBase64}`}
-                    alt="Screenshot"
-                    loading="eager"
-                    decoding="async"
-                    data-no-drag
-                    className="w-full rounded-md border border-white/10"
-                  />
-                )}
-                {!imagePreviewBase64 && imageUrl && (
-                  <img
-                    src={imageUrl}
-                    alt="Screenshot"
-                    loading="eager"
-                    decoding="async"
-                    data-no-drag
-                    className="w-full rounded-md border border-white/10"
-                  />
-                )}
-                {!imagePreviewBase64 &&
-                  !imageUrl &&
-                  images.map((image, index) => (
-                    <img
-                      key={`${label}-image-${index}`}
-                      src={`data:${imageMime};base64,${image}`}
-                      alt="Screenshot"
-                      loading="eager"
-                      decoding="async"
-                      data-no-drag
-                      className="w-full rounded-md border border-white/10"
-                    />
-                  ))}
-              </div>
-            </Disclosure>
-          )}
           {isStreaming && (
             <span className="ml-1 inline-flex items-center align-middle">
               <Loader
@@ -271,6 +323,21 @@ function MessageBubbleComponent({ message, showThinking }: Props) {
               />
             </span>
           )}
+        </div>
+      )}
+      {showRegenerate && !isStreaming && onRegenerate && (
+        <div>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            data-no-drag
+            onClick={onRegenerate}
+            aria-label="Regenerate response"
+            className="message-regenerate"
+          >
+            <RotateCcw size={14} />
+          </Button>
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@ use crate::{
     shortcuts,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -19,8 +20,12 @@ pub struct KeybindConfig {
 pub struct ToolConfig {
     #[serde(default = "default_capture_tool_enabled")]
     pub capture_screen_text_enabled: bool,
+    #[serde(default = "default_web_search_enabled")]
+    pub web_search_enabled: bool,
     #[serde(default = "default_agents_sdk_enabled")]
     pub agents_sdk_enabled: bool,
+    #[serde(default)]
+    pub tool_toggles: HashMap<String, bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,17 +48,12 @@ fn default_show_thinking() -> bool {
     true
 }
 
-fn default_agents_sdk_enabled() -> bool {
+fn default_web_search_enabled() -> bool {
     false
 }
 
-impl Default for ToolConfig {
-    fn default() -> Self {
-        Self {
-            capture_screen_text_enabled: true,
-            agents_sdk_enabled: default_agents_sdk_enabled(),
-        }
-    }
+fn default_agents_sdk_enabled() -> bool {
+    false
 }
 
 impl Default for KeybindConfig {
@@ -61,6 +61,17 @@ impl Default for KeybindConfig {
         Self {
             toggle_overlay: "Ctrl+Space".into(),
             focus_overlay: "Ctrl+Shift+Space".into(),
+        }
+    }
+}
+
+impl Default for ToolConfig {
+    fn default() -> Self {
+        Self {
+            capture_screen_text_enabled: default_capture_tool_enabled(),
+            web_search_enabled: default_web_search_enabled(),
+            agents_sdk_enabled: default_agents_sdk_enabled(),
+            tool_toggles: HashMap::new(),
         }
     }
 }
@@ -101,6 +112,34 @@ impl Default for OverlayConfig {
     }
 }
 
+pub fn capture_tool_enabled(app: &AppHandle) -> bool {
+    let config = load_overlay_config(app);
+    if let Some(enabled) = config.tools.tool_toggles.get("capture_screen_image") {
+        return *enabled;
+    }
+    config.tools.capture_screen_text_enabled
+}
+
+pub fn set_capture_tool_enabled_value(app: &AppHandle, enabled: bool) {
+    let mut config = load_overlay_config(app);
+    config.tools.capture_screen_text_enabled = enabled;
+    config
+        .tools
+        .tool_toggles
+        .insert("capture_screen_image".to_string(), enabled);
+    save_overlay_config(app, &config);
+}
+
+#[tauri::command]
+pub fn get_capture_tool_enabled(app: AppHandle) -> bool {
+    capture_tool_enabled(&app)
+}
+
+#[tauri::command]
+pub fn set_capture_tool_enabled(app: AppHandle, enabled: bool) {
+    set_capture_tool_enabled_value(&app, enabled);
+}
+
 // App config path is platform-specific (e.g., %APPDATA% on Windows).
 fn config_path(app: &AppHandle) -> Option<PathBuf> {
     app.path()
@@ -136,26 +175,6 @@ pub fn save_overlay_config(app: &AppHandle, config: &OverlayConfig) {
     if let Ok(payload) = serde_json::to_string_pretty(config) {
         let _ = fs::write(path, payload);
     }
-}
-
-pub fn capture_tool_enabled(app: &AppHandle) -> bool {
-    load_overlay_config(app).tools.capture_screen_text_enabled
-}
-
-pub fn set_capture_tool_enabled_value(app: &AppHandle, enabled: bool) {
-    let mut config = load_overlay_config(app);
-    config.tools.capture_screen_text_enabled = enabled;
-    save_overlay_config(app, &config);
-}
-
-#[tauri::command]
-pub fn get_capture_tool_enabled(app: AppHandle) -> bool {
-    capture_tool_enabled(&app)
-}
-
-#[tauri::command]
-pub fn set_capture_tool_enabled(app: AppHandle, enabled: bool) {
-    set_capture_tool_enabled_value(&app, enabled);
 }
 
 #[tauri::command]

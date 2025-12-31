@@ -1,15 +1,18 @@
+import {
+  PromptInput,
+  PromptInputTextarea,
+} from "@/components/prompt-kit/prompt-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { useInputHistory } from "../hooks/useInputHistory";
 import {
   useEffect,
   useRef,
-  type ChangeEvent,
+  useState,
   type KeyboardEvent,
   type RefObject,
 } from "react";
 import { ArrowUp } from "lucide-react";
-import { Square } from "lucide-react";
 
 interface Props {
   input: string;
@@ -18,7 +21,7 @@ interface Props {
   onSend: () => void;
   onCancel: () => void;
   history: string[];
-  inputRef?: RefObject<HTMLInputElement | null>;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
 }
 
 export function ChatInput({
@@ -30,8 +33,10 @@ export function ChatInput({
   history,
   inputRef,
 }: Props) {
-  const localRef = useRef<HTMLInputElement | null>(null);
+  const localRef = useRef<HTMLTextAreaElement | null>(null);
   const resolvedRef = inputRef ?? localRef;
+  const [isMultiline, setIsMultiline] = useState(false);
+
   const { handleHistoryKeyDown, resetHistory, isNavigating } = useInputHistory({
     history,
     value: input,
@@ -40,40 +45,74 @@ export function ChatInput({
 
   useEffect(() => {
     resolvedRef.current?.focus();
-  }, [resolvedRef]);
+  }, []);
+
+  useEffect(() => {
+    const el = resolvedRef.current;
+    if (!el) return;
+    const style = window.getComputedStyle(el);
+    const lineHeight = Number.parseFloat(style.lineHeight) || 0;
+    const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+    const contentHeight = el.scrollHeight - paddingTop - paddingBottom;
+    if (!lineHeight) {
+      setIsMultiline(contentHeight > 48);
+      return;
+    }
+    setIsMultiline(contentHeight > lineHeight * 1.4);
+  }, [input, resolvedRef]);
+
+  const handleSubmit = () => {
+    if (isSending) {
+      onCancel();
+      return;
+    }
+    if (!input.trim()) return;
+    onSend();
+  };
 
   return (
-    <div className="overlay-chat-input px-4 pt-4 pb-4 flex w-full gap-2">
-      <Input
-        aria-label="Chat message"
-        placeholder="Type and press Enter"
+    <div className="overlay-chat-input px-4 pt-4 pb-4">
+      <PromptInput
+        isLoading={isSending}
         value={input}
-        autoFocus
-        ref={resolvedRef}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => {
+        onValueChange={(value) => {
           if (isNavigating) resetHistory();
-          setInput(e.target.value);
+          setInput(value);
         }}
-        onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => {
-          if (handleHistoryKeyDown(e)) return;
-          // Enter sends; Shift+Enter is allowed for multiline input.
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            onSend();
-          }
-        }}
-        className="overlay-input flex-1"
-      />
-
-      <Button
-        aria-label={isSending ? "Cancel response" : "Send message"}
-        disabled={!isSending && !input.trim()}
-        onClick={isSending ? onCancel : onSend}
-        size="icon"
-        className="rounded-full bg-white/5 text-white/70 hover:bg-white/10"
+        onSubmit={handleSubmit}
+        textareaRef={resolvedRef}
+        className="chat-input-shell relative w-full"
       >
-        {isSending ? <Square /> : <ArrowUp />}
-      </Button>
+        <div className="chat-input-inner relative">
+          <PromptInputTextarea
+            aria-label="Chat message"
+            placeholder="Ask anything"
+            className="chat-input-textarea"
+            onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
+              handleHistoryKeyDown(event);
+            }}
+          />
+
+          <Button
+            size="icon"
+            disabled={!isSending && !input.trim()}
+            onClick={handleSubmit}
+            aria-label={isSending ? "Cancel response" : "Send message"}
+            data-sending={isSending ? "true" : "false"}
+            className={cn(
+              "absolute right-2 size-9 rounded-full chat-input-send",
+              isMultiline ? "bottom-2" : "top-1/2 -translate-y-1/2",
+            )}
+          >
+            {!isSending ? (
+              <ArrowUp size={18} />
+            ) : (
+              <span className="size-3 rounded-xs bg-white" />
+            )}
+          </Button>
+        </div>
+      </PromptInput>
     </div>
   );
 }

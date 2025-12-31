@@ -6,6 +6,9 @@ export type CaptureConsent = {
 
 export type ToolOptions = {
   toolsEnabled: boolean;
+  captureToolEnabled?: boolean;
+  webSearchEnabled?: boolean;
+  toolToggles?: Record<string, boolean>;
   requestScreenCapture?: () => Promise<CaptureConsent>;
   setCaptureInProgress?: (inProgress: boolean) => void;
   setToolUsage?: (usage: ToolUsage) => void;
@@ -30,7 +33,7 @@ export type ChatMessage = Message & {
   imageMime?: string;
   imagePreviewBase64?: string;
   imagePreviewMime?: string;
-  toolActivity?: string;
+  toolActivity?: string | string[];
 };
 
 export type AssistantPayload = Message & {

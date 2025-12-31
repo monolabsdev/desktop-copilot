@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -33,6 +32,12 @@ import {
   type OverlayConfig,
   type OverlayCorner,
 } from "../shared/config";
+import { TOOL_REGISTRY } from "../overlay/tools/registry";
+
+type WebSearchKeyStatus = {
+  has_key: boolean;
+  source?: string | null;
+};
 
 export function Preferences() {
   const [config, setConfig] = useState<OverlayConfig>(DEFAULT_OVERLAY_CONFIG);
@@ -43,6 +48,13 @@ export function Preferences() {
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const statusTimeoutRef = useRef<number | null>(null);
+  const [webSearchKey, setWebSearchKey] = useState("");
+  const [webSearchKeyStatus, setWebSearchKeyStatus] =
+    useState<WebSearchKeyStatus | null>(null);
+  const [webSearchKeyStatusText, setWebSearchKeyStatusText] = useState<
+    string | null
+  >(null);
+  const [isSavingWebSearchKey, setIsSavingWebSearchKey] = useState(false);
 
   useEffect(() => {
     const clamped = Math.min(1, Math.max(0.6, config.appearance.panel_opacity));
@@ -84,6 +96,16 @@ export function Preferences() {
     };
   }, []);
 
+  useEffect(() => {
+    invoke<WebSearchKeyStatus>("get_ollama_web_search_key_status")
+      .then((payload) => {
+        setWebSearchKeyStatus(payload);
+      })
+      .catch(() => {
+        setWebSearchKeyStatus({ has_key: false });
+      });
+  }, []);
+
   const setCorner = (corner: OverlayCorner) =>
     setConfig((prev) => ({ ...prev, corner }));
   const setKeybind = (key: "toggle_overlay" | "focus_overlay", value: string) =>
@@ -98,21 +120,34 @@ export function Preferences() {
       ...prev,
       appearance: { ...prev.appearance, panel_opacity: value },
     }));
-  const setShowThinking = (enabled: boolean) =>
+  const setShowThinking = (value: boolean) =>
     setConfig((prev) => ({
       ...prev,
-      appearance: { ...prev.appearance, show_thinking: enabled },
+      appearance: { ...prev.appearance, show_thinking: value },
     }));
-  const setAgentsSdkEnabled = (enabled: boolean) =>
+  const setAgentsSdkEnabled = (value: boolean) =>
     setConfig((prev) => ({
       ...prev,
-      tools: { ...prev.tools, agents_sdk_enabled: enabled },
+      tools: { ...prev.tools, agents_sdk_enabled: value },
     }));
-  const setCaptureEnabled = (enabled: boolean) =>
-    setConfig((prev) => ({
-      ...prev,
-      tools: { ...prev.tools, capture_screen_text_enabled: enabled },
-    }));
+  const setToolToggle = (toolName: string, enabled: boolean) =>
+    setConfig((prev) => {
+      const toolToggles = {
+        ...(prev.tools.tool_toggles ?? {}),
+        [toolName]: enabled,
+      };
+      const tools = { ...prev.tools, tool_toggles: toolToggles };
+      if (toolName === "capture_screen_image") {
+        tools.capture_screen_text_enabled = enabled;
+      }
+      if (toolName === "web_search") {
+        tools.web_search_enabled = enabled;
+      }
+      return {
+        ...prev,
+        tools,
+      };
+    });
 
   const isDirty = useMemo(
     () => JSON.stringify(config) !== JSON.stringify(initialConfig),
@@ -140,6 +175,80 @@ export function Preferences() {
       setIsSaving(false);
     }
   };
+
+  const handleSaveWebSearchKey = async () => {
+    if (!webSearchKey.trim()) {
+      setWebSearchKeyStatusText("Enter a key first.");
+      return;
+    }
+    setIsSavingWebSearchKey(true);
+    setWebSearchKeyStatusText(null);
+    try {
+      await invoke("set_ollama_web_search_api_key", { key: webSearchKey });
+      setWebSearchKey("");
+      const status = await invoke<WebSearchKeyStatus>(
+        "get_ollama_web_search_key_status",
+      );
+      setWebSearchKeyStatus(status);
+      setWebSearchKeyStatusText("Web search key saved.");
+    } catch (err) {
+      setWebSearchKeyStatusText(
+        err instanceof Error ? err.message : "Failed to save key.",
+      );
+    } finally {
+      setIsSavingWebSearchKey(false);
+    }
+  };
+
+  const handleClearWebSearchKey = async () => {
+    setIsSavingWebSearchKey(true);
+    setWebSearchKeyStatusText(null);
+    try {
+      await invoke("clear_ollama_web_search_api_key");
+      const status = await invoke<WebSearchKeyStatus>(
+        "get_ollama_web_search_key_status",
+      );
+      setWebSearchKeyStatus(status);
+      setWebSearchKeyStatusText("Web search key cleared.");
+    } catch (err) {
+      setWebSearchKeyStatusText(
+        err instanceof Error ? err.message : "Failed to clear key.",
+      );
+    } finally {
+      setIsSavingWebSearchKey(false);
+    }
+  };
+
+  const toolPreferences = useMemo(
+    () =>
+      TOOL_REGISTRY.filter((tool) => tool.preferences?.showInPreferences).map(
+        (tool) => ({
+          name: tool.name,
+          label:
+            tool.preferences?.label ??
+            tool.displayName ??
+            tool.name.replace(/_/g, " "),
+          description: tool.preferences?.description,
+          defaultEnabled: tool.preferences?.defaultEnabled ?? true,
+          requiresWebSearchKey: tool.preferences?.requiresWebSearchKey ?? false,
+          statuses: tool.preferences?.statuses ?? [],
+        }),
+      ),
+    [],
+  );
+
+  const resolveToolToggle = (toolName: string, fallback: boolean) => {
+    const toggles = config.tools.tool_toggles ?? {};
+    if (toolName in toggles) return toggles[toolName];
+    if (toolName === "capture_screen_image") {
+      return config.tools.capture_screen_text_enabled;
+    }
+    if (toolName === "web_search") {
+      return config.tools.web_search_enabled;
+    }
+    return fallback;
+  };
+
 
   return (
     <PanelRoot variant="preferences">
@@ -181,6 +290,17 @@ export function Preferences() {
             <PanelStack gap="md">
               <PanelSectionTitle>Appearance</PanelSectionTitle>
               <PanelStack gap="sm">
+                <PanelRow className="items-center justify-between">
+                  <PanelFieldLabel>Show reasoning boxes</PanelFieldLabel>
+                  <Switch
+                    checked={config.appearance.show_thinking}
+                    onCheckedChange={(value: boolean) =>
+                      setShowThinking(value)
+                    }
+                  />
+                </PanelRow>
+              </PanelStack>
+              <PanelStack gap="sm">
                 <PanelFieldLabel>Panel opacity</PanelFieldLabel>
                 <PanelRow>
                   <Slider
@@ -201,16 +321,105 @@ export function Preferences() {
                   </div>
                 </PanelRow>
               </PanelStack>
-              <PanelRow>
-                <Switch
-                  id="show-thinking"
-                  checked={config.appearance.show_thinking}
-                  onCheckedChange={setShowThinking}
-                />
-                <Label htmlFor="show-thinking" className="panel-label">
-                  Show reasoning blocks
-                </Label>
-              </PanelRow>
+            </PanelStack>
+
+            <PanelStack gap="md">
+              <PanelSectionTitle>Tools</PanelSectionTitle>
+              <PanelStack gap="sm">
+                {toolPreferences.map((tool) => (
+                  <PanelRow
+                    key={tool.name}
+                    className="items-start justify-between gap-3"
+                  >
+                    <div className="panel-stack panel-stack--sm">
+                      <div className="panel-row panel-row--sm items-center">
+                        <PanelFieldLabel>{tool.label}</PanelFieldLabel>
+                        {tool.statuses.map((status) => (
+                          <StatusChip
+                            key={`${tool.name}-${status}`}
+                            variant={status}
+                            casing="normal"
+                          />
+                        ))}
+                      </div>
+                      {tool.description && (
+                        <div className="panel-subtle">
+                          {tool.description}
+                        </div>
+                      )}
+                    </div>
+                    <Switch
+                      checked={resolveToolToggle(
+                        tool.name,
+                        tool.defaultEnabled,
+                      )}
+                      onCheckedChange={(value: boolean) =>
+                        setToolToggle(tool.name, value)
+                      }
+                    />
+                  </PanelRow>
+                ))}
+                <PanelRow className="items-start justify-between gap-3">
+                  <div className="panel-stack panel-stack--sm">
+                    <div className="panel-row panel-row--sm items-center">
+                      <PanelFieldLabel>Agents SDK</PanelFieldLabel>
+                      <StatusChip variant="experimental" casing="normal" />
+                    </div>
+                    <div className="panel-subtle">
+                      Enable the multi-agent runtime for advanced workflows.
+                    </div>
+                  </div>
+                  <Switch
+                    checked={config.tools.agents_sdk_enabled}
+                    onCheckedChange={(value: boolean) =>
+                      setAgentsSdkEnabled(value)
+                    }
+                  />
+                </PanelRow>
+              </PanelStack>
+              {toolPreferences.some((tool) => tool.requiresWebSearchKey) && (
+                <PanelStack gap="sm">
+                  <PanelFieldLabel>Web search API key</PanelFieldLabel>
+                  <Input
+                    type="password"
+                    aria-label="Web search API key"
+                    value={webSearchKey}
+                    onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                      setWebSearchKey(e.target.value)
+                    }
+                    className="overlay-input"
+                    placeholder="Enter OLLAMA_WEB_SEARCH_API_KEY"
+                  />
+                  <PanelRow className="items-center justify-between gap-2">
+                    <div className="panel-subtle">
+                      {webSearchKeyStatus?.has_key
+                        ? `Key stored (${webSearchKeyStatus.source ?? "saved"}).`
+                        : "No key saved."}
+                    </div>
+                    <div className="panel-row panel-row--sm">
+                      <Button
+                        size="sm"
+                        disabled={isSavingWebSearchKey}
+                        onClick={handleSaveWebSearchKey}
+                        className="overlay-button"
+                      >
+                        Save key
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={isSavingWebSearchKey}
+                        onClick={handleClearWebSearchKey}
+                        className="overlay-button overlay-button--ghost"
+                      >
+                        Clear key
+                      </Button>
+                    </div>
+                  </PanelRow>
+                  <div className="panel-status">
+                    {webSearchKeyStatusText ?? " "}
+                  </div>
+                </PanelStack>
+              )}
             </PanelStack>
 
             <PanelStack gap="lg">
@@ -239,31 +448,6 @@ export function Preferences() {
               </PanelStack>
             </PanelStack>
 
-            <PanelStack gap="md">
-              <PanelSectionTitle>Tools</PanelSectionTitle>
-              <PanelRow>
-                <Switch
-                  id="capture-screen-text"
-                  checked={config.tools.capture_screen_text_enabled}
-                  onCheckedChange={setCaptureEnabled}
-                />
-                <Label htmlFor="capture-screen-text" className="panel-label">
-                  Capture screen image
-                </Label>
-                <StatusChip variant="beta" />
-              </PanelRow>
-              <PanelRow>
-                <Switch
-                  id="agents-sdk"
-                  checked={config.tools.agents_sdk_enabled}
-                  onCheckedChange={setAgentsSdkEnabled}
-                />
-                <Label htmlFor="agents-sdk" className="panel-label">
-                  Use Agents SDK
-                </Label>
-                <StatusChip variant="experimental" />
-              </PanelRow>
-            </PanelStack>
           </PanelBody>
 
           <PanelFooter>

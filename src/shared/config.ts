@@ -21,7 +21,9 @@ export type OverlayConfig = {
   };
   tools: {
     capture_screen_text_enabled: boolean;
+    web_search_enabled: boolean;
     agents_sdk_enabled: boolean;
+    tool_toggles: Record<string, boolean>;
   };
 };
 
@@ -42,6 +44,8 @@ export const DEFAULT_OVERLAY_CONFIG: OverlayConfig = {
   },
   tools: {
     capture_screen_text_enabled: true,
+    web_search_enabled: false,
     agents_sdk_enabled: false,
+    tool_toggles: {},
   },
 };

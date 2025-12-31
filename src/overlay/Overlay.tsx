@@ -9,7 +9,6 @@ import {
   type PointerEvent,
 } from "react";
 import { MessageList } from "./components/MessageList";
-import { ChatControls } from "./components/ChatControls";
 import { ChatInput } from "./components/ChatInput";
 import { useOllamaChat } from "./hooks/useOllamaChat";
 import { useAgentsSdkChat } from "./hooks/useAgentsSdkChat";
@@ -22,19 +21,27 @@ import { OverlayHeader } from "./components/OverlayHeader";
 import { DEFAULT_OVERLAY_CONFIG, type OverlayConfig } from "../shared/config";
 import { useTauriEvent } from "../shared/hooks/useTauriEvent";
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
-import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
+import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";       
 
 export function Overlay() {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [captureToolEnabled, setCaptureToolEnabled] = useState(true);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [panelOpacity, setPanelOpacity] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.panel_opacity,
   );
   const [showThinking, setShowThinking] = useState(
     DEFAULT_OVERLAY_CONFIG.appearance.show_thinking,
   );
+  const [captureToolEnabled, setCaptureToolEnabled] = useState(
+    DEFAULT_OVERLAY_CONFIG.tools.capture_screen_text_enabled,
+  );
+  const [webSearchEnabled, setWebSearchEnabled] = useState(
+    DEFAULT_OVERLAY_CONFIG.tools.web_search_enabled,
+  );
   const [agentsSdkEnabled, setAgentsSdkEnabled] = useState(
     DEFAULT_OVERLAY_CONFIG.tools.agents_sdk_enabled,
+  );
+  const [toolToggles, setToolToggles] = useState<Record<string, boolean>>(
+    DEFAULT_OVERLAY_CONFIG.tools.tool_toggles,
   );
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -52,10 +59,12 @@ export function Overlay() {
 
   // Keep React state aligned with the persisted config payload.
   const applyConfig = useCallback((config: OverlayConfig) => {
-    setCaptureToolEnabled(config.tools.capture_screen_text_enabled);
     setPanelOpacity(config.appearance.panel_opacity);
     setShowThinking(config.appearance.show_thinking);
+    setCaptureToolEnabled(config.tools.capture_screen_text_enabled);
+    setWebSearchEnabled(config.tools.web_search_enabled);
     setAgentsSdkEnabled(config.tools.agents_sdk_enabled);
+    setToolToggles(config.tools.tool_toggles ?? {});
   }, []);
 
   useTauriEvent("overlay:shown", () => {
@@ -159,8 +168,20 @@ export function Overlay() {
     consentResolver.current = null;
   }, []);
 
+  const mergedToolToggles = {
+    ...toolToggles,
+    capture_screen_image: captureToolEnabled,
+    web_search: webSearchEnabled,
+  };
+  const toolsEnabled =
+    captureToolEnabled ||
+    webSearchEnabled ||
+    Object.values(mergedToolToggles).some(Boolean);
   const ollamaChat = useOllamaChat(DEFAULT_MODEL, {
-    toolsEnabled: captureToolEnabled,
+    toolsEnabled,
+    captureToolEnabled,
+    webSearchEnabled,
+    toolToggles: mergedToolToggles,
     visionModel: VISION_MODEL,
     requestScreenCapture: requestCaptureConsent,
     setCaptureInProgress: setIsCapturing,
@@ -176,8 +197,22 @@ export function Overlay() {
     },
   });
   const agentsChat = useAgentsSdkChat({
-    toolsEnabled: false,
+    toolsEnabled,
+    captureToolEnabled,
+    toolToggles: mergedToolToggles,
     visionModel: VISION_MODEL,
+    requestScreenCapture: requestCaptureConsent,
+    setCaptureInProgress: setIsCapturing,
+    beforeCapture: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await invoke("set_overlay_visibility", { visible: false });
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    },
+    afterCapture: async () => {
+      const window = getCurrentWindow();
+      await invoke("set_overlay_visibility", { visible: true });
+      await window.setFocus();
+    },
   });
   const {
     messages,
@@ -190,7 +225,6 @@ export function Overlay() {
     clearHistory,
     regenerateLastResponse,
     canRegenerate,
-    toolUsage,
   } = agentsSdkEnabled ? agentsChat : ollamaChat;
   const inputHistory = useMemo(
     () =>
@@ -199,6 +233,7 @@ export function Overlay() {
         .map((message) => message.content ?? ""),
     [messages],
   );
+
 
   useOverlayHotkeys({
     onStop: cancelSend,
@@ -226,6 +261,8 @@ export function Overlay() {
               isSending={isSending}
               showThinking={showThinking}
               ollamaConnected={ollamaConnected}
+              canRegenerate={canRegenerate}
+              onRegenerate={regenerateLastResponse}
             />
 
             {/* Error */}
@@ -242,12 +279,6 @@ export function Overlay() {
               onCancel={cancelSend}
               inputRef={inputRef}
               history={inputHistory}
-            />
-            <ChatControls
-              isSending={isSending}
-              canRegenerate={canRegenerate}
-              onRegenerate={regenerateLastResponse}
-              toolUsage={toolUsage}
             />
           </PanelFrame>
         </PanelStage>

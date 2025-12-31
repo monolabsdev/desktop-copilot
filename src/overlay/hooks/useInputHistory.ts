@@ -34,7 +34,9 @@ export function useInputHistory({
   }, []);
 
   const handleHistoryKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
+    (
+      event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+    ) => {
       if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
       if (event.ctrlKey || event.metaKey || event.altKey) return false;
 

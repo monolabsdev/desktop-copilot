@@ -20,6 +20,7 @@ type StreamBindings = {
   toolConfig?: unknown;
   requestIdRef: MutableRefObject<number>;
   streamMessageIdRef: MutableRefObject<number>;
+  toolActivityRef?: MutableRefObject<string[] | null>;
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
 };
 
@@ -27,6 +28,7 @@ type StreamArgs = StreamBindings & {
   baseMessages: Message[];
   requestId: number;
   modelOverride?: string;
+  reuseStreamId?: number;
 };
 
 export function createStreamChat(bindings: StreamBindings) {
@@ -34,12 +36,14 @@ export function createStreamChat(bindings: StreamBindings) {
     baseMessages: Message[],
     requestId: number,
     modelOverride?: string,
+    reuseStreamId?: number,
   ) =>
     streamOllamaChat({
       ...bindings,
       baseMessages,
       requestId,
       modelOverride,
+      reuseStreamId,
     });
 }
 
@@ -50,8 +54,10 @@ async function streamOllamaChat({
   toolConfig,
   requestIdRef,
   streamMessageIdRef,
+  toolActivityRef,
   setMessages,
   modelOverride,
+  reuseStreamId,
 }: StreamArgs): Promise<StreamResult | null> {
   const resolvedModel = modelOverride ?? model;
   const streamId = `stream-${Date.now()}-${Math.random()
@@ -75,6 +81,14 @@ async function streamOllamaChat({
 
   const ensureStreamingMessage = () => {
     if (streamedMessageId !== null) return;
+    if (typeof reuseStreamId === "number") {
+      streamedMessageId = reuseStreamId;
+      streamMessageIdRef.current = Math.max(
+        streamMessageIdRef.current,
+        reuseStreamId,
+      );
+      return;
+    }
     const nextId = streamMessageIdRef.current + 1;
     streamedMessageId = nextId;
     streamMessageIdRef.current = nextId;
@@ -101,6 +115,7 @@ async function streamOllamaChat({
               content,
               thinking: streamingThinking,
               thinkingDurationMs: streamingDurationMs,
+              toolActivity: toolActivityRef?.current ?? undefined,
             }
           : message,
       ),
@@ -184,8 +199,12 @@ async function streamOllamaChat({
       if (message?.tool_calls?.length) {
         finished = true;
         cleanup();
-        removeStreamingMessage();
-        resolve({ toolCalls: message.tool_calls });
+        ensureStreamingMessage();
+        updateStreamingMessage();
+        resolve({
+          toolCalls: message.tool_calls,
+          streamMessageId: streamedMessageId ?? undefined,
+        });
         return;
       }
 

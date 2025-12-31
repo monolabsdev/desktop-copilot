@@ -4,7 +4,6 @@ import {
   Agent,
   Runner,
   tool,
-  type AgentInputItem,
   user,
   assistant,
 } from "@openai/agents";
@@ -16,22 +15,32 @@ import { DEFAULT_MODEL, VISION_MODEL } from "../constants";
 import { ollamaChat } from "../ollama/client";
 import type { ChatMessage, ToolOptions, ToolUsage } from "./ollama/types";
 import { toErrorMessage } from "./ollama/utils";
+import { appendScreenshotMessage } from "./ollama/screenshot";
+import { getToolActivityLabel, isToolEnabled } from "../tools/registry";
 
 type UseAgentsSdkOptions = ToolOptions & {
   model?: string;
 };
 
+type AgentInputItem = ReturnType<typeof user>;
+type AgentsRunner = {
+  run: (
+    agent: unknown,
+    inputItems: AgentInputItem[],
+    options: { stream: boolean; signal?: AbortSignal },
+  ) => Promise<{
+    toTextStream: () => ReadableStream<string>;
+    completed: Promise<unknown>;
+  }>;
+};
+
 const AGENT_INSTRUCTIONS =
   "You are a fast, minimal desktop assistant. " +
   "Keep answers concise, structured, and actionable. " +
-  "Use the screenshot tool only when it helps answer the user's request.";
+  "Use the screenshot tool only when it helps answer the user's request. " +
+  "Never send the screenshot back to the user; they already have it.";      
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
-
-function formatToolName(name?: string) {
-  if (!name) return "tool";
-  return name.replace(/_/g, " ");
-}
 
 export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -45,15 +54,33 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
   const requestIdRef = useRef(0);
   const streamMessageIdRef = useRef(0);
   const historyRef = useRef<AgentInputItem[]>([]);
-  const toolActivityRef = useRef<string | undefined>(undefined);
+  const toolActivityRef = useRef<string[] | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const runnerRef = useRef<Runner | null>(null);
-  const agentRef = useRef<Agent | null>(null);
+  const runnerRef = useRef<AgentsRunner | null>(null);
+  const agentRef = useRef<unknown | null>(null);
   const agentConfigRef = useRef({
     model: options?.model ?? DEFAULT_MODEL,
     toolsEnabled,
     visionModel: options?.visionModel ?? VISION_MODEL,
   });
+
+  const appendLocalScreenshot = (
+    filePath: string,
+    mimeType?: string,
+    previewBase64?: string,
+    previewMime?: string,
+  ) => {
+    const message: ChatMessage = {
+      role: "assistant",
+      content: "",
+      imagePath: filePath,
+      imageMime: mimeType,
+      imagePreviewBase64: previewBase64,
+      imagePreviewMime: previewMime,
+    };
+    setMessages((prev) => appendScreenshotMessage(prev, message));
+    toolActivityRef.current = undefined;
+  };
 
   const ensureAgent = () => {
     const nextConfig = {
@@ -86,13 +113,20 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
       },
       strict: false,
       execute: async () => {
-        if (!toolsEnabled || !options?.requestScreenCapture) {
+        const captureEnabled =
+          isToolEnabled("capture_screen_image", options) &&
+          !!options?.requestScreenCapture;
+        const requestScreenCapture = options?.requestScreenCapture;
+        if (!captureEnabled || !requestScreenCapture) {
           return "Screen capture tool is disabled.";
         }
-        toolActivityRef.current = `Using ${formatToolName("capture_screen_image")}.`;
+        const activity = getToolActivityLabel("capture_screen_image");
+        toolActivityRef.current = toolActivityRef.current
+          ? [...toolActivityRef.current, activity]
+          : [activity];
         setToolUsage({ inProgress: true, name: "capture_screen_image" });
         try {
-          const consent = await options.requestScreenCapture();
+          const consent = await requestScreenCapture();
           if (!consent.approved) {
             return "User declined screen capture.";
           }
@@ -111,10 +145,19 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
             "file_path" in toolResponse
               ? (toolResponse as {
                   file_path?: string;
+                  mime_type?: string;
+                  preview_base64?: string;
+                  preview_mime?: string;
                   app_name?: string | null;
                 })
               : null;
           if (response?.file_path) {
+            appendLocalScreenshot(
+              response.file_path,
+              response.mime_type,
+              response.preview_base64,
+              response.preview_mime,
+            );
             const visionResponse = await ollamaChat({
               model: nextConfig.visionModel,
               messages: [

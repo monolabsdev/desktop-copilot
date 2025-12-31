@@ -16,7 +16,7 @@ export function OverlayHeader({ isBusy, hasMessages, onClearHistory }: Props) {
         size="sm"
         onClick={onClearHistory}
         disabled={!hasMessages || isBusy}
-        className="h-7 px-2 text-[11px] tracking-[0.12em] bg-white/5 text-white/55 hover:bg-white/10"
+        className="overlay-button h-7 px-2 text-[11px] tracking-[0.12em]"
       >
         Clear
       </Button>

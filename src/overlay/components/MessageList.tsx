@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../hooks/ollama/types";
 import { ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,8 @@ interface Props {
   isSending: boolean;
   showThinking: boolean;
   ollamaConnected: boolean;
+  canRegenerate: boolean;
+  onRegenerate: () => void;
 }
 
 export function MessageList({
@@ -16,6 +18,8 @@ export function MessageList({
   isSending,
   showThinking,
   ollamaConnected,
+  canRegenerate,
+  onRegenerate,
 }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +69,13 @@ export function MessageList({
     scrollToBottom("auto");
   };
 
+  const lastAssistantIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  }, [messages]);
+
   return (
     <div className="relative flex-1 min-h-0">
       <div
@@ -85,6 +96,13 @@ export function MessageList({
               key={`${message.role}-${index}`}
               message={message}
               showThinking={showThinking}
+              showRegenerate={
+                canRegenerate &&
+                !isSending &&
+                message.role === "assistant" &&
+                index === lastAssistantIndex
+              }
+              onRegenerate={onRegenerate}
             />
           ))
         )}
@@ -103,7 +121,7 @@ export function MessageList({
           size="sm"
           data-no-drag
           onClick={handleScrollToBottom}
-          className="absolute bottom-4 right-5 bg-white/10 text-white/70 hover:bg-white/15"
+          className="overlay-button absolute bottom-4 right-5"
         >
           <ArrowDown className="h-4 w-4" />
           Back to bottom

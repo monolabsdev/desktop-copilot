@@ -6,6 +6,7 @@ mod config;
 mod files;
 mod ollama;
 mod overlay;
+mod secrets;
 mod shortcuts;
 use tauri::Manager;
 use tauri::{
@@ -14,7 +15,16 @@ use tauri::{
     WebviewUrl, WebviewWindowBuilder,
 };
 
+fn load_env() {
+    // Best-effort: load developer keys from repo root for local runs.
+    for filename in [".env.local", ".env"] {
+        let _ = dotenvy::from_filename(filename);
+        let _ = dotenvy::from_path(std::path::Path::new("..").join(filename));
+    }
+}
+
 fn main() {
+    load_env();
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -92,7 +102,11 @@ fn main() {
             files::read_file,
             ollama::ollama_health_check,
             ollama::ollama_chat,
+            ollama::ollama_web_search,
             ollama::ollama_chat_stream,
+            secrets::get_ollama_web_search_key_status,
+            secrets::set_ollama_web_search_api_key,
+            secrets::clear_ollama_web_search_api_key,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

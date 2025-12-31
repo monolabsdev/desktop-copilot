@@ -1,8 +1,11 @@
 import type { MutableRefObject } from "react";
 import type { Message } from "ollama";
-
 import type { StreamResult, ToolOptions } from "./types";
-import { toErrorMessage } from "./utils";
+import {
+  getToolActivityLabel,
+  getToolCompletedLabel,
+  getToolDefinition,
+} from "../../tools/registry";
 
 type InvokeFn = (
   command: string,
@@ -13,6 +16,7 @@ type StreamChat = (
   baseMessages: Message[],
   requestId: number,
   modelOverride?: string,
+  reuseStreamId?: number,
 ) => Promise<StreamResult | null>;
 
 type ApplyAssistantMessage = (result: StreamResult) => void;
@@ -24,19 +28,15 @@ type ToolHandlerDeps = {
   streamChat: StreamChat;
   requestIdRef: MutableRefObject<number>;
   applyAssistantMessage: ApplyAssistantMessage;
+  getPendingToolMessageId?: () => number | null;
 };
 
-function buildToolMessage(payload: unknown): Message {
+function buildToolMessage(toolName: string, payload: unknown): Message {
   return {
     role: "tool",
     content: JSON.stringify(payload),
-    tool_name: "capture_screen_image",
+    tool_name: toolName,
   } satisfies Message;
-}
-
-function formatToolName(name?: string) {
-  if (!name) return "tool";
-  return name.replace(/_/g, " ");
 }
 
 export function createToolHandler({
@@ -46,6 +46,7 @@ export function createToolHandler({
   streamChat,
   requestIdRef,
   applyAssistantMessage,
+  getPendingToolMessageId,
 }: ToolHandlerDeps) {
   const streamFollowup = async (
     baseMessages: Message[],
@@ -61,11 +62,12 @@ export function createToolHandler({
     ];
 
     const requestId = requestIdRef.current;
-    const modelOverride =
-      toolCalls.some((call) => call.function?.name === "capture_screen_image")
-        ? options?.visionModel
-        : undefined;
-    const normalizedMessages = followupMessages.map((message, index) => {
+    const hasImages = extraMessages.some((message) => {
+      const withImages = message as Message & { images?: string[] };
+      return !!withImages.images?.length;
+    });
+    const modelOverride = hasImages ? options?.visionModel : undefined;
+    const normalizedMessages = followupMessages.map((message, index) => {       
       const withImages = message as Message & { images?: string[] };
       if (!withImages.images || withImages.images.length === 0) {
         return message;
@@ -78,10 +80,12 @@ export function createToolHandler({
         content: rest.content ?? "",
       } as Message;
     });
+    const reuseStreamId = getPendingToolMessageId?.() ?? undefined;
     const result = await streamChat(
       normalizedMessages,
       requestId,
       modelOverride,
+      reuseStreamId,
     );
     if (!result || requestId !== requestIdRef.current) return;
 
@@ -91,6 +95,9 @@ export function createToolHandler({
     }
 
     if (result.assistantMessage) {
+      const completedTool = toolCalls.find((call) => call.function?.name);
+      const completedToolName = completedTool?.function?.name ?? "tool";
+      options?.onToolActivity?.(getToolCompletedLabel(completedToolName));
       applyAssistantMessage(result);
     }
   };
@@ -99,120 +106,28 @@ export function createToolHandler({
     toolCalls: NonNullable<Message["tool_calls"]>,
     baseMessages: Message[],
   ) => {
-    const toolName =
-      toolCalls.find((call) => call.function?.name)?.function?.name ?? "tool";
+    const toolCall = toolCalls.find((call) => call.function?.name);
+    const toolName = toolCall?.function?.name ?? "tool";
+    const toolDefinition = getToolDefinition(toolName);
     const setToolUsage = options?.setToolUsage;
     setToolUsage?.({ inProgress: true, name: toolName });
-    options?.onToolActivity?.(`Using ${formatToolName(toolName)}.`);
+    options?.onToolActivity?.(getToolActivityLabel(toolName));
     try {
-      if (
-        !toolCalls.some((call) => call.function?.name === "capture_screen_image")
-      ) {
+      if (!toolDefinition) {
         throw new Error("Unsupported tool call.");
       }
 
-      if (!options?.toolsEnabled || !options.requestScreenCapture) {
-        const toolMessage = buildToolMessage({
-          error: "Screen capture tool is disabled.",
-        });
-
-        appendHistory([
-          { role: "assistant", content: "", tool_calls: toolCalls },
-          toolMessage,
-        ]);
-
-        await streamFollowup(
-          baseMessages,
-          toolCalls,
-          toolMessage,
-          [],
-        );
-        return true;
-      }
-
-      const consent = await options.requestScreenCapture();
-      if (!consent.approved) {
-        const toolMessage = buildToolMessage({
-          error: "User declined screen capture.",
-        });
-
-        appendHistory([
-          { role: "assistant", content: "", tool_calls: toolCalls },
-          toolMessage,
-        ]);
-
-        await streamFollowup(
-          baseMessages,
-          toolCalls,
-          toolMessage,
-          [],
-        );
-        return true;
-      }
-
-      options.setCaptureInProgress?.(true);
-      let toolResponse: unknown = null;
-      try {
-        await options.beforeCapture?.();
-        toolResponse = await invoke("capture_screen_image");
-      } catch (err) {
-        throw new Error(toErrorMessage(err, "Screen capture failed."));
-      } finally {
-        await options.afterCapture?.();
-        options.setCaptureInProgress?.(false);
-      }
-
-      const response =
-        toolResponse &&
-        typeof toolResponse === "object" &&
-        "file_path" in toolResponse
-          ? (toolResponse as {
-              mime_type?: string;
-              file_path?: string;
-              source?: string;
-              app_name?: string | null;
-              resolution?: {
-                width: number;
-                height: number;
-                scale_factor: number;
-              };
-            })
-          : null;
-
-      const toolMessage = buildToolMessage({
-        source: response?.source,
-        app_name: response?.app_name,
-        resolution: response?.resolution,
-        mime_type: response?.mime_type,
-      });
-
-      const extraMessages: Message[] = [];
-      if (response?.file_path) {
-        const label = response.app_name
-          ? `Screenshot from ${response.app_name}.`
-          : "Screenshot attached.";
-        extraMessages.push({
-          role: "user",
-          content:
-            `${label} Use the image to answer the user's last request. ` +
-            "Respond in markdown. Do not include the screenshot in the response.",
-          images: [response.file_path],
-        } as Message);
-      }
-
-      appendHistory([
-        { role: "assistant", content: "", tool_calls: toolCalls },
-        toolMessage,
-        ...extraMessages,
-      ]);
-
-      await streamFollowup(
-        baseMessages,
+      const handled = await toolDefinition.handler({
+        toolCall,
         toolCalls,
-        toolMessage,
-        extraMessages,
-      );
-      return true;
+        baseMessages,
+        options,
+        invoke,
+        appendHistory,
+        streamFollowup,
+        buildToolMessage,
+      });
+      return handled;
     } finally {
       setToolUsage?.({
         inProgress: false,

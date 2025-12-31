@@ -62,7 +62,9 @@ export function StatusChip({
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-        casing === "upper" ? "uppercase tracking-[0.18em]" : "tracking-[0.08em]",
+        casing === "upper"
+          ? "uppercase tracking-[0.18em]"
+          : "tracking-[0.08em]",
         spec.className,
         className,
       )}
@@ -70,7 +72,9 @@ export function StatusChip({
       aria-label={`${spec.label} status`}
     >
       {showDot && spec.dotClassName ? (
-        <span className={cn("mr-1.5 h-2 w-2 rounded-full", spec.dotClassName)} />
+        <span
+          className={cn("mr-1.5 h-2 w-2 rounded-full", spec.dotClassName)}
+        />
       ) : null}
       {spec.label}
     </span>

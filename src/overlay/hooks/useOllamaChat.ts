@@ -2,7 +2,11 @@ import { useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Message } from "ollama";
 import { handleChatCommand } from "../commands";
-import { CAPTURE_SCREEN_IMAGE_TOOL } from "../tools/captureScreenImage";
+import {
+  getToolActivityReplacement,
+  getToolConfig,
+  isToolEnabled,
+} from "../tools/registry";
 import {
   createStreamChat,
   createToolHandler,
@@ -13,6 +17,13 @@ import {
   type ToolOptions,
   type ToolUsage,
 } from "./ollama";
+import { appendScreenshotMessage } from "./ollama/screenshot";
+
+const OLLAMA_INSTRUCTIONS =
+  "You are a fast, minimal desktop assistant. " +
+  "Keep answers concise, structured, and actionable. " +
+  "Use the screenshot tool only when it helps answer the user's request or they explicitly ask for it. " +
+  "Never send the screenshot back to the user; they already have it.";
 
 export function useOllamaChat(model: string, options?: ToolOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -26,15 +37,15 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
   const requestIdRef = useRef(0);
   const streamMessageIdRef = useRef(0);
   const historyRef = useRef<Message[]>([]);
-  const toolActivityRef = useRef<string | null>(null);
-  const toolConfig = options?.toolsEnabled
-    ? [CAPTURE_SCREEN_IMAGE_TOOL]
-    : undefined;
+  const toolActivityRef = useRef<string[] | null>(null);
+  const pendingToolMessageIdRef = useRef<number | null>(null);
+  const toolConfig = getToolConfig(options);
   const streamChat = createStreamChat({
     model,
     toolConfig,
     requestIdRef,
     streamMessageIdRef,
+    toolActivityRef,
     setMessages,
   });
 
@@ -51,6 +62,15 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       normalized.displayMessage.toolActivity = toolActivityRef.current;
       toolActivityRef.current = null;
     }
+    if (pendingToolMessageIdRef.current !== null) {
+      const pendingId = pendingToolMessageIdRef.current;
+      if (pendingId !== result.streamMessageId) {
+        setMessages((prev) =>
+          prev.filter((message) => message.streamId !== pendingId),
+        );
+      }
+      pendingToolMessageIdRef.current = null;
+    }
     appendHistory([normalized.historyMessage]);
     setMessages((prev) =>
       prev.map((message) =>
@@ -60,35 +80,68 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       ),
     );
   };
+  const clearPendingToolMessage = () => {
+    if (pendingToolMessageIdRef.current === null) return;
+    const pendingId = pendingToolMessageIdRef.current;
+    pendingToolMessageIdRef.current = null;
+    setMessages((prev) =>
+      prev.filter((message) => message.streamId !== pendingId),
+    );
+  };
   const toolHandlerOptions: ToolOptions = {
     toolsEnabled: options?.toolsEnabled ?? false,
+    captureToolEnabled: options?.captureToolEnabled ?? false,
+    webSearchEnabled: options?.webSearchEnabled ?? false,
+    toolToggles: options?.toolToggles,
     requestScreenCapture: options?.requestScreenCapture,
     setCaptureInProgress: options?.setCaptureInProgress,
     beforeCapture: options?.beforeCapture,
     afterCapture: options?.afterCapture,
     setToolUsage,
     visionModel: options?.visionModel,
-    onLocalMessage: (message) =>
-      setMessages((prev) => {
-        const next = [...prev, message];
-        const screenshotIndexes = next
-          .map((item, index) => {
-            const withImage = item as ChatMessage & {
-              images?: string[];
-              imagePath?: string;
-            };
-            return withImage.images?.length || withImage.imagePath ? index : -1;
-          })
-          .filter((index) => index >= 0);
-        const maxScreenshots = 3;
-        if (screenshotIndexes.length <= maxScreenshots) return next;
-        const toRemove = new Set(
-          screenshotIndexes.slice(0, screenshotIndexes.length - maxScreenshots),
-        );
-        return next.filter((_, index) => !toRemove.has(index));
-      }),
+    onLocalMessage: (message) => {
+      setMessages((prev) => appendScreenshotMessage(prev, message));
+      toolActivityRef.current = null;
+    },
     onToolActivity: (activity) => {
-      toolActivityRef.current = activity;
+      if (!activity) {
+        toolActivityRef.current = null;
+        return;
+      }
+      const replacement = getToolActivityReplacement(activity);
+      const current = toolActivityRef.current ?? [];
+      if (replacement && current.length > 0) {
+        const next = current.map((entry) =>
+          entry === replacement.from ? replacement.to : entry,
+        );
+        toolActivityRef.current = next;
+        if (pendingToolMessageIdRef.current !== null) {
+          const pendingId = pendingToolMessageIdRef.current;
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.streamId === pendingId
+                ? { ...message, toolActivity: next }
+                : message,
+            ),
+          );
+        }
+        return;
+      }
+      if (current.length > 0 && current[current.length - 1] === activity) {
+        return;
+      }
+      const next = current.length ? [...current, activity] : [activity];
+      toolActivityRef.current = next;
+      if (pendingToolMessageIdRef.current !== null) {
+        const pendingId = pendingToolMessageIdRef.current;
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.streamId === pendingId
+              ? { ...message, toolActivity: next }
+              : message,
+          ),
+        );
+      }
     },
   };
 
@@ -99,10 +152,29 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     streamChat,
     requestIdRef,
     applyAssistantMessage,
+    getPendingToolMessageId: () => pendingToolMessageIdRef.current,
   });
 
+  const shouldForceCapture = (message: string) => {
+    if (!isToolEnabled("capture_screen_image", toolHandlerOptions)) {
+      return false;
+    }
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes("screenshot") ||
+      normalized.includes("screen shot") ||
+      normalized.includes("screen capture") ||
+      normalized.includes("see my screen") ||
+      normalized.includes("what's on my screen") ||
+      normalized.includes("what is on my screen")
+    );
+  };
+
   const buildBaseMessages = (allowImages: boolean) => {
-    const base = historyRef.current;
+    const base: Message[] = [
+      { role: "system", content: OLLAMA_INSTRUCTIONS },
+      ...historyRef.current,
+    ];
     if (allowImages) return base;
     return base.map((message) => {
       const withImages = message as Message & { images?: string[] };
@@ -162,12 +234,14 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     setError(null);
     setToolUsage((prev) => ({ ...prev, inProgress: false }));
     toolActivityRef.current = null;
+    clearPendingToolMessage();
   };
 
   const clearHistory = () => {
     setMessages([]);
     historyRef.current = [];
     toolActivityRef.current = null;
+    pendingToolMessageIdRef.current = null;
   };
 
   const regenerateLastResponse = async () => {
@@ -222,13 +296,25 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
 
     try {
       const baseMessages = buildBaseMessages(false);
-      const result = await streamChat(
-        baseMessages,
-        requestId,
-      );
+      if (shouldForceCapture(trimmed)) {
+        const toolCalls = [
+          {
+            function: {
+              name: "capture_screen_image",
+              arguments: {},
+            },
+          },
+        ];
+        await handleToolCalls(toolCalls, baseMessages);
+        return;
+      }
+      const result = await streamChat(baseMessages, requestId);
       if (!result || requestId !== requestIdRef.current) return;
 
       if (result.toolCalls && result.toolCalls.length > 0) {
+        if (result.streamMessageId !== undefined) {
+          pendingToolMessageIdRef.current = result.streamMessageId;
+        }
         // Tool calls are executed locally, then we send a follow-up chat.
         const toolReply = await handleToolCalls(result.toolCalls, baseMessages);
         if (!toolReply) return;
@@ -241,6 +327,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
       setError(toErrorMessage(err, "Ollama unreachable."));
+      clearPendingToolMessage();
     } finally {
       if (requestId === requestIdRef.current) {
         setIsSending(false);

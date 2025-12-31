@@ -6,13 +6,33 @@ use std::path::Path;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 
+use crate::secrets;
+
 // Keep this local-only; the frontend never calls Ollama directly.
 const OLLAMA_BASE_URL: &str = "http://localhost:11434";
+const OLLAMA_WEB_SEARCH_API_URL: &str = "https://ollama.com/api/web_search";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OllamaHealthPayload {
     pub ok: bool,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OllamaWebSearchResponse {
+    pub results: Vec<OllamaWebSearchResult>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OllamaWebSearchResult {
+    pub content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaWebSearchRequest {
+    query: String,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "maxResults")]
+    max_results: Option<u32>,
 }
 
 fn build_client() -> Result<reqwest::Client, String> {
@@ -148,6 +168,45 @@ pub async fn ollama_chat(request: Value) -> Result<Value, String> {
         eprintln!("Ollama chat request failed: {detail}");
         detail
     })
+}
+
+#[tauri::command]
+pub async fn ollama_web_search(
+    query: String,
+    max_results: Option<u32>,
+) -> Result<OllamaWebSearchResponse, String> {
+    let client = build_client()?;
+    let api_key = secrets::load_web_search_api_key()?;
+    let payload = OllamaWebSearchRequest { query, max_results };
+    let response = client
+        .post(OLLAMA_WEB_SEARCH_API_URL)
+        .header(reqwest::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .header("X-API-Key", api_key)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|err| {
+            let detail = describe_reqwest_error(&err);
+            eprintln!("Ollama web search request failed: {detail}");
+            detail
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        let detail = format!("non-200 from Ollama web search: {status} {body}");
+        eprintln!("Ollama web search request failed: {detail}");
+        return Err(detail);
+    }
+
+    response
+        .json::<OllamaWebSearchResponse>()
+        .await
+        .map_err(|err| {
+            let detail = format!("invalid Ollama web search response: {err}");
+            eprintln!("Ollama web search request failed: {detail}");
+            detail
+        })
 }
 
 #[derive(Debug, Serialize, Clone)]

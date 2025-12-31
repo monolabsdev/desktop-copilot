@@ -64,6 +64,13 @@ Notes:
 - The backend logs real connection errors (refused, timeout, non-200).
 - If you use a different host/port, update `src-tauri/src/ollama.rs`.
 
+### Ollama web search (optional)
+
+For release builds, enter your API key in Preferences. The key is stored in the
+system keychain and never written to `config.json`.
+
+For local dev, you can still set `OLLAMA_WEB_SEARCH_API_KEY` in `.env.local`.
+
 ## Config
 
 The app reads and writes a JSON config file at the Tauri app config dir:
@@ -84,7 +91,8 @@ Example:
     "show_thinking": true
   },
   "tools": {
-    "capture_screen_text_enabled": true
+    "capture_screen_text_enabled": true,
+    "web_search_enabled": false
   }
 }
 ```
@@ -103,6 +111,30 @@ Use the `show_thinking` toggle (added in this repo) as a reference:
 3. Wire the UI in `src/preferences/Preferences.tsx` if it should be editable.
 4. Consume the setting where it matters (example: `src/overlay/Overlay.tsx`
    passes `showThinking` down to `src/overlay/components/MessageBubble.tsx`).
+
+## Adding tools (modular registry)
+
+Tools are registered in one place and are automatically available to the UI and
+tool routing.
+
+Steps:
+1. Add a tool schema in `src/overlay/tools/` (see `webSearch.ts` or
+   `captureScreenImage.ts`).
+2. Register it in `src/overlay/tools/registry.ts` with:
+   - `name` (tool call name)
+   - `tool` (schema)
+   - `handler` (exec logic + followup)
+   - `displayName`/`activityLabel` (UI labels)
+   - `isEnabled` (gate via config flags)
+3. Expose a config flag if you want a toggle:
+   - `src-tauri/src/config.rs`
+   - `src/shared/config.ts`
+   - `src/preferences/Preferences.tsx`
+   - `src/overlay/Overlay.tsx` (pass the flag into tool options)
+
+Notes:
+- The registry drives the tool list sent to the model and the local handlers.
+- Tool activity uses your Disclosure UI automatically.
 
 ## OCR support
 

@@ -1,3 +1,4 @@
+use base64::Engine;
 use image::{DynamicImage, ImageFormat};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -17,6 +18,8 @@ pub struct CaptureResolution {
 pub struct CaptureResult {
     pub mime_type: &'static str,
     pub file_path: String,
+    pub preview_base64: String,
+    pub preview_mime: &'static str,
     pub source: &'static str,
     pub app_name: Option<String>,
     pub resolution: CaptureResolution,
@@ -24,6 +27,10 @@ pub struct CaptureResult {
 
 const MAX_IMAGE_DIM: u32 = 1280;
 const MAX_CAPTURE_FILES: usize = 10;
+
+fn encode_preview(png: &EncodedPng) -> String {
+    base64::engine::general_purpose::STANDARD.encode(&png.bytes)
+}
 
 #[tauri::command]
 pub async fn capture_screen_image(app: AppHandle) -> Result<CaptureResult, String> {
@@ -49,9 +56,12 @@ async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, Stri
 
     let png_bytes = capture_png(x, y, width, height)?;
     let file_path = save_capture(&app, &png_bytes)?;
+    let preview_base64 = encode_preview(&png_bytes);
     Ok(CaptureResult {
         mime_type: "image/png",
         file_path: file_path.to_string_lossy().to_string(),
+        preview_base64,
+        preview_mime: "image/png",
         source: "window",
         app_name: title,
         resolution: CaptureResolution {
@@ -70,9 +80,12 @@ async fn capture_screen_image_impl(app: AppHandle) -> Result<CaptureResult, Stri
 
     let png_bytes = capture_screen_png()?;
     let file_path = save_capture(&app, &png_bytes)?;
+    let preview_base64 = encode_preview(&png_bytes);
     Ok(CaptureResult {
         mime_type: "image/png",
         file_path: file_path.to_string_lossy().to_string(),
+        preview_base64,
+        preview_mime: "image/png",
         source: "screen",
         app_name: None,
         resolution: CaptureResolution {

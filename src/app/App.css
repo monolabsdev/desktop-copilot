@@ -6,8 +6,8 @@
 html,
 body {
     font-family:
-        "SF Pro Text", "Segoe UI", "Helvetica Neue", "Avenir Next", "Nimbus Sans",
-        sans-serif;
+        "SF Pro Text", "Segoe UI", "Helvetica Neue", "Avenir Next",
+        "Nimbus Sans", sans-serif;
 }
 
 body[data-view="overlay"] {
@@ -164,6 +164,11 @@ body[data-view="preferences"] {
     color: rgba(255, 255, 255, 0.5);
 }
 
+.panel-subtle {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
 .overlay-capture-notice {
     position: fixed;
     top: 0.75rem;
@@ -205,20 +210,18 @@ body[data-view="preferences"] {
         --field-border: oklch(1 0 0 / 0.2);
         --field-shadow: 0 0 0 0 transparent;
     }
-
 }
 
 .overlay-panel {
-    background: rgba(12, 12, 12, var(--overlay-panel-opacity));
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    backdrop-filter: blur(14px) saturate(120%);
-    -webkit-backdrop-filter: blur(14px) saturate(120%);
-    border-radius: 16px;
+    background: rgba(10, 10, 10, var(--overlay-panel-opacity));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 18px;
     margin: 12px;
     max-height: calc(100vh - 24px);
     width: calc(100% - 24px);
     overflow: hidden;
     animation: overlay-in 160ms ease-out;
+    backdrop-filter: blur(18px) saturate(1.1);
 }
 
 .overlay-header-title {
@@ -230,12 +233,132 @@ body[data-view="preferences"] {
 }
 
 .overlay-chat-input {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 10, 10, calc(var(--overlay-panel-opacity) * 0.35));
+}
+
+.chat-input-shell {
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 10, 10, calc(var(--overlay-panel-opacity) * 0.15));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.chat-input-shell:focus-within {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.chat-input-textarea {
+    width: 100%;
+    min-height: 48px;
+    resize: none;
+    background: transparent;
+    padding: 0.7rem 3.25rem 0.7rem 1rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.chat-input-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.chat-input-send {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    box-shadow: none;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.chat-input-send:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+}
+
+.chat-input-send:disabled {
+    background: transparent;
+    border-color: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.45);
+    box-shadow: none;
+}
+
+.chat-input-send[data-sending="true"] {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.chat-input-inner {
+    display: flex;
+    align-items: center;
+}
+
+.chat-input-textarea {
+    flex: 1;
+}
+
+.message-regenerate {
+    height: 26px;
+    width: 26px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.6);
+    background: transparent;
+    transition:
+        color 0.2s ease,
+        border-color 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.message-regenerate:hover {
+    color: rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-1px);
+}
+
+.overlay-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .overlay-chat-controls {
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
+
+.overlay-button {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.65);
+    box-shadow: none;
+    transition:
+        border-color 0.2s ease,
+        color 0.2s ease,
+        background-color 0.2s ease;
+}
+
+.overlay-button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.16);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.overlay-button:disabled {
+    opacity: 0.45;
+}
+
+.overlay-button--ghost {
+    border-color: transparent;
+}
+
 .overlay-panel {
     cursor: grab;
 }
@@ -243,7 +366,6 @@ body[data-view="preferences"] {
 .overlay-panel:active {
     cursor: grabbing;
 }
-
 
 .overlay-panel :is(input, textarea, button, select, a) {
     cursor: auto;
@@ -259,8 +381,6 @@ body[data-view="preferences"] {
 }
 
 .overlay-input {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     box-shadow: none;
     padding-left: 0.75rem;
@@ -269,16 +389,13 @@ body[data-view="preferences"] {
     padding-bottom: 0.5rem;
     font-size: 0.95rem;
     line-height: 1.5;
-    transition: border-color 0.2s ease, background-color 0.2s ease;
+    transition:
+        border-color 0.2s ease,
+        background-color 0.2s ease;
 }
 
 .overlay-input::placeholder {
     color: rgba(255, 255, 255, 0.4);
-}
-
-.overlay-panel:hover .overlay-input {
-    border-color: rgba(255, 255, 255, 0.16);
-    background-color: rgba(255, 255, 255, 0.06);
 }
 
 .overlay-input:focus-visible {
@@ -287,7 +404,6 @@ body[data-view="preferences"] {
 }
 
 .overlay-select {
-    background-color: rgba(255, 255, 255, 0.03);
     transition:
         border-color 0.2s ease,
         background-color 0.2s ease;
@@ -479,11 +595,11 @@ body[data-view="preferences"] {
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+    * {
+        @apply border-border outline-ring/50;
     }
-  body {
-    @apply bg-background text-foreground;
+    body {
+        @apply bg-background text-foreground;
     }
 }
 

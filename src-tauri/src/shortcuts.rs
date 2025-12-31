@@ -4,7 +4,10 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
-use crate::{config::OverlayConfig, overlay::{snap_overlay_to_corner, toggle_overlay_window, OverlayState}};
+use crate::{
+    config::OverlayConfig,
+    overlay::{snap_overlay_to_corner, toggle_overlay_window, OverlayState},
+};
 
 pub fn register_overlay_shortcut(app: &tauri::AppHandle, config: &OverlayConfig) {
     // Cleanup from previous runs
