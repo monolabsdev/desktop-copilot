@@ -45,9 +45,17 @@ export function MessageList({
       return;
     }
 
-    const distanceFromBottom =
-      list.scrollHeight - list.scrollTop - list.clientHeight;
-    const isAtBottom = distanceFromBottom <= 4;
+    const maxScrollTop = Math.max(0, list.scrollHeight - list.clientHeight);
+    const isScrollable = maxScrollTop > 1;
+    const isAtBottom = list.scrollTop >= maxScrollTop - 4;
+
+    if (!isScrollable) {
+      if (!autoScrollEnabled) {
+        setAutoScrollEnabled(true);
+      }
+      setShowScrollToBottom(false);
+      return;
+    }
 
     if (!isAtBottom) {
       if (autoScrollEnabled) {

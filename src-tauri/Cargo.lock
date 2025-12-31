@@ -44,6 +44,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
+ "window-vibrancy",
  "windows 0.60.0",
 ]
 

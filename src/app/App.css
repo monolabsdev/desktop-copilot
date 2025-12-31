@@ -58,7 +58,7 @@ body[data-view="preferences"] {
 }
 
 .panel-frame--overlay {
-    max-width: 36rem;
+    max-width: 100%;
     pointer-events: auto;
 }
 
@@ -216,12 +216,18 @@ body[data-view="preferences"] {
     background: rgba(10, 10, 10, var(--overlay-panel-opacity));
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 18px;
-    margin: 12px;
-    max-height: calc(100vh - 24px);
-    width: calc(100% - 24px);
+    margin: 0;
+    max-height: 100%;
+    width: 100%;
     overflow: hidden;
     animation: overlay-in 160ms ease-out;
     backdrop-filter: blur(18px) saturate(1.1);
+}
+
+.preferences-panel {
+    margin: 12px;
+    max-height: calc(100% - 24px);
+    width: calc(100% - 24px);
 }
 
 .overlay-header-title {

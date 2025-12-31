@@ -14,12 +14,29 @@ use tauri::{
     tray::TrayIconBuilder,
     WebviewUrl, WebviewWindowBuilder,
 };
+#[cfg(target_os = "macos")]
+use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial, NSVisualEffectState};
+
+#[cfg(target_os = "macos")]
+const MACOS_VIBRANCY_RADIUS: f64 = 18.0;
 
 fn load_env() {
     // Best-effort: load developer keys from repo root for local runs.
     for filename in [".env.local", ".env"] {
         let _ = dotenvy::from_filename(filename);
         let _ = dotenvy::from_path(std::path::Path::new("..").join(filename));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_vibrancy(window: &tauri::WebviewWindow) {
+    if let Err(error) = apply_vibrancy(
+        window,
+        NSVisualEffectMaterial::HudWindow,
+        Some(NSVisualEffectState::Active),
+        Some(MACOS_VIBRANCY_RADIUS),
+    ) {
+        eprintln!("Failed to apply macOS vibrancy: {error}");
     }
 }
 
@@ -37,6 +54,8 @@ fn main() {
 
             shortcuts::register_overlay_shortcut(&handle, &config);
             if let Some(window) = app.webview_windows().get("overlay") {
+                #[cfg(target_os = "macos")]
+                apply_macos_vibrancy(window);
                 let state = app.state::<overlay::OverlayState>();
                 overlay::snap_overlay_to_corner(window, state.current_corner());
                 let handle_for_events = handle.clone();
@@ -77,9 +96,13 @@ fn main() {
                         .inner_size(420.0, 520.0)
                         .resizable(false)
                         .decorations(true);
-                        #[cfg(target_os = "windows")]
+                        #[cfg(any(target_os = "windows", target_os = "macos"))]
                         let builder = builder.transparent(true);
-                        let _ = builder.build();
+                        let window = builder.build();
+                        #[cfg(target_os = "macos")]
+                        if let Ok(window) = window.as_ref() {
+                            apply_macos_vibrancy(window);
+                        }
                     }
                     // adds the event for the quit menu uitem
                     "quit" => app.exit(0),
