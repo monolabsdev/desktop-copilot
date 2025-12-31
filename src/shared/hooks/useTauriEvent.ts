@@ -4,9 +4,14 @@ import { listen, type EventCallback, type UnlistenFn } from "@tauri-apps/api/eve
 export function useTauriEvent<T>(eventName: string, handler: EventCallback<T>) {
   useEffect(() => {
     let unlisten: UnlistenFn | null = null;
+    let active = true;
 
     listen<T>(eventName, handler)
       .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe();
+          return;
+        }
         unlisten = unsubscribe;
       })
       .catch(() => {
@@ -14,6 +19,7 @@ export function useTauriEvent<T>(eventName: string, handler: EventCallback<T>) {
       });
 
     return () => {
+      active = false;
       if (unlisten) unlisten();
     };
   }, [eventName, handler]);

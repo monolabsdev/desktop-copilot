@@ -66,25 +66,28 @@ pub fn register_overlay_shortcut(app: &tauri::AppHandle, config: &OverlayConfig)
     let focus_keybind = config.keybinds.focus_overlay.clone();
 
     if let Some(key) = normalized_keybind(toggle_keybind.as_str()) {
-        if let Err(error) = app.global_shortcut().on_shortcut(key, move |app, _, event| {
-            if event.state != ShortcutState::Pressed {
-                return;
-            }
-            let mut last = last_trigger_clone.lock().unwrap();
-            let now = Instant::now();
+        if let Err(error) = app
+            .global_shortcut()
+            .on_shortcut(key, move |app, _, event| {
+                if event.state != ShortcutState::Pressed {
+                    return;
+                }
+                let mut last = last_trigger_clone.lock().unwrap();
+                let now = Instant::now();
 
-            if now.duration_since(*last) < debounce {
-                println!("Ignoring duplicate trigger");
-                return;
-            }
+                if now.duration_since(*last) < debounce {
+                    println!("Ignoring duplicate trigger");
+                    return;
+                }
 
-            *last = now;
+                *last = now;
 
-            if let Some(window) = app.webview_windows().get("overlay") {
-                let state = app.state::<OverlayState>();
-                toggle_overlay_window(window, &state);
-            }
-        }) {
+                if let Some(window) = app.webview_windows().get("overlay") {
+                    let state = app.state::<OverlayState>();
+                    toggle_overlay_window(window, &state);
+                }
+            })
+        {
             eprintln!("Failed to register toggle overlay shortcut: {error}");
             emit_shortcut_error(app, key, &error.to_string());
         } else {
@@ -93,27 +96,30 @@ pub fn register_overlay_shortcut(app: &tauri::AppHandle, config: &OverlayConfig)
     }
 
     if let Some(key) = normalized_keybind(focus_keybind.as_str()) {
-        if let Err(error) = app.global_shortcut().on_shortcut(key, move |app, _, event| {
-            if event.state != ShortcutState::Pressed {
-                return;
-            }
-            if let Some(window) = app.webview_windows().get("overlay") {
-                let state = app.state::<OverlayState>();
-                // Show and focus without toggling visibility off if already open.
-                if !state.is_visible() {
-                    let _ = window.show();
-                    if let Some(position) = state.last_position() {
-                        let _ = window.set_position(tauri::Position::Physical(position));
-                    } else {
-                        snap_overlay_to_corner(window, state.current_corner());
-                    }
-                    state.set_visible(true);
+        if let Err(error) = app
+            .global_shortcut()
+            .on_shortcut(key, move |app, _, event| {
+                if event.state != ShortcutState::Pressed {
+                    return;
                 }
-                let _ = window.set_focus();
-                let _ = window.set_always_on_top(true);
-                let _ = window.emit("overlay:shown", ());
-            }
-        }) {
+                if let Some(window) = app.webview_windows().get("overlay") {
+                    let state = app.state::<OverlayState>();
+                    // Show and focus without toggling visibility off if already open.
+                    if !state.is_visible() {
+                        let _ = window.show();
+                        if let Some(position) = state.last_position() {
+                            let _ = window.set_position(tauri::Position::Physical(position));
+                        } else {
+                            snap_overlay_to_corner(window, state.current_corner());
+                        }
+                        state.set_visible(true);
+                    }
+                    let _ = window.set_focus();
+                    let _ = window.set_always_on_top(true);
+                    let _ = window.emit("overlay:shown", ());
+                }
+            })
+        {
             eprintln!("Failed to register focus overlay shortcut: {error}");
             emit_shortcut_error(app, key, &error.to_string());
         } else {

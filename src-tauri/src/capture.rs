@@ -131,7 +131,6 @@ fn capture_png(x: i32, y: i32, width: u32, height: u32) -> Result<EncodedPng, St
     })
 }
 
-
 #[cfg(target_os = "windows")]
 fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, String> {
     use std::mem::{size_of, zeroed};
@@ -189,7 +188,7 @@ fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, Stri
             biHeight: -(height as i32),
             biPlanes: 1,
             biBitCount: 32,
-            biCompression: BI_RGB.0 as u32,
+            biCompression: BI_RGB.0,
             biSizeImage: 0,
             biXPelsPerMeter: 0,
             biYPelsPerMeter: 0,
@@ -202,7 +201,7 @@ fn capture_bgra(x: i32, y: i32, width: u32, height: u32) -> Result<Vec<u8>, Stri
             hdc_mem,
             hbitmap,
             0,
-            height as u32,
+            height,
             Some(buffer.as_mut_ptr() as *mut _),
             &mut bmi,
             DIB_RGB_COLORS,
@@ -247,8 +246,7 @@ fn capture_screen_png() -> Result<EncodedPng, String> {
 
     let bytes = std::fs::read(&path).map_err(|err| format!("Failed to read capture: {err}"))?;
     let _ = std::fs::remove_file(&path);
-    let image =
-        image::load_from_memory(&bytes).map_err(|err| format!("PNG load failed: {err}"))?;
+    let image = image::load_from_memory(&bytes).map_err(|err| format!("PNG load failed: {err}"))?;
     let (resized, scale_factor) = downscale_image(image);
     let bytes = encode_png(&resized)?;
     Ok(EncodedPng {
@@ -269,7 +267,11 @@ fn downscale_image(image: DynamicImage) -> (DynamicImage, f64) {
     let scale = MAX_IMAGE_DIM as f64 / max_dim as f64;
     let target_width = (width as f64 * scale).round().max(1.0) as u32;
     let target_height = (height as f64 * scale).round().max(1.0) as u32;
-    let resized = image.resize(target_width, target_height, image::imageops::FilterType::Triangle);
+    let resized = image.resize(
+        target_width,
+        target_height,
+        image::imageops::FilterType::Triangle,
+    );
     (resized, scale)
 }
 
@@ -289,8 +291,7 @@ fn save_capture(app: &AppHandle, png: &EncodedPng) -> Result<PathBuf, String> {
         .app_cache_dir()
         .map_err(|err| format!("Failed to locate cache dir: {err}"))?
         .join("captures");
-    std::fs::create_dir_all(&dir)
-        .map_err(|err| format!("Failed to create capture dir: {err}"))?;
+    std::fs::create_dir_all(&dir).map_err(|err| format!("Failed to create capture dir: {err}"))?;
     let filename = format!(
         "capture-{}.png",
         std::time::SystemTime::now()
@@ -299,8 +300,7 @@ fn save_capture(app: &AppHandle, png: &EncodedPng) -> Result<PathBuf, String> {
             .as_millis()
     );
     let path = dir.join(filename);
-    std::fs::write(&path, &png.bytes)
-        .map_err(|err| format!("Failed to write capture: {err}"))?;
+    std::fs::write(&path, &png.bytes).map_err(|err| format!("Failed to write capture: {err}"))?;
     prune_captures(&dir, MAX_CAPTURE_FILES);
     Ok(path)
 }
@@ -353,7 +353,6 @@ fn active_window_rect() -> Result<(windows::Win32::Foundation::RECT, Option<Stri
         Ok((rect, title))
     }
 }
-
 
 #[cfg(target_os = "windows")]
 fn window_title(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {

@@ -131,8 +131,10 @@ async function streamOllamaChat({
 
   const result = await new Promise<StreamResult | null>((resolve, reject) => {
     let unlisten: (() => void) | null = null;
+    let active = true;
 
     const cleanup = () => {
+      active = false;
       if (unlisten) unlisten();
     };
 
@@ -262,6 +264,10 @@ async function streamOllamaChat({
 
     listen<StreamPayload>("ollama:chunk", handler)
       .then((unsubscribe) => {
+        if (!active) {
+          unsubscribe();
+          return;
+        }
         unlisten = unsubscribe;
         return ollamaChatStream(
           {

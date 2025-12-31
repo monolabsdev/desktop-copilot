@@ -15,8 +15,8 @@ pub struct ReadFileResponse {
 pub fn read_file(path: String) -> Result<ReadFileResponse, String> {
     // Keep reads bounded for safety; this tool is meant for small text files.
     let path = PathBuf::from(path);
-    let metadata = fs::metadata(&path)
-        .map_err(|err| format!("Unable to read file metadata: {err}"))?;
+    let metadata =
+        fs::metadata(&path).map_err(|err| format!("Unable to read file metadata: {err}"))?;
     if !metadata.is_file() {
         return Err("Path is not a file.".into());
     }
@@ -29,8 +29,8 @@ pub fn read_file(path: String) -> Result<ReadFileResponse, String> {
     }
 
     let bytes = fs::read(&path).map_err(|err| format!("Unable to read file: {err}"))?;
-    let content = String::from_utf8(bytes)
-        .map_err(|_| "File is not valid UTF-8 text.".to_string())?;
+    let content =
+        String::from_utf8(bytes).map_err(|_| "File is not valid UTF-8 text.".to_string())?;
 
     Ok(ReadFileResponse {
         path: path.to_string_lossy().into_owned(),

@@ -33,6 +33,10 @@ import {
   type OverlayConfig,
   type OverlayCorner,
 } from "../shared/config";
+import {
+  clampPanelOpacity,
+  getPanelOpacityRange,
+} from "../shared/platform";
 import { TOOL_REGISTRY } from "../overlay/tools/registry";
 import { useTauriEvent } from "../shared/hooks/useTauriEvent";
 
@@ -63,14 +67,22 @@ export function Preferences() {
     {},
   );
   const [activeTab, setActiveTab] = useState<PreferencesTab>("general");
+  const panelOpacityRange = useMemo(() => getPanelOpacityRange(), []);
 
   useEffect(() => {
-    const clamped = Math.min(1, Math.max(0.6, config.appearance.panel_opacity));
+    const clamped = clampPanelOpacity(
+      config.appearance.panel_opacity,
+      panelOpacityRange,
+    );
     document.documentElement.style.setProperty(
       "--overlay-panel-opacity",
       clamped.toString(),
     );
-  }, [config.appearance.panel_opacity]);
+  }, [
+    config.appearance.panel_opacity,
+    panelOpacityRange.max,
+    panelOpacityRange.min,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -301,6 +313,11 @@ export function Preferences() {
     { id: "shortcuts", label: "Shortcuts" },
   ];
 
+  const sliderOpacityValue = clampPanelOpacity(
+    config.appearance.panel_opacity,
+    panelOpacityRange,
+  );
+
   return (
     <PanelRoot variant="preferences">
       <PanelStage>
@@ -384,10 +401,10 @@ export function Preferences() {
                       <PanelFieldLabel>Panel opacity</PanelFieldLabel>
                       <PanelRow>
                         <Slider
-                          min={0.6}
-                          max={1}
+                          min={panelOpacityRange.min}
+                          max={panelOpacityRange.max}
                           step={0.05}
-                          value={[config.appearance.panel_opacity]}
+                          value={[sliderOpacityValue]}
                           onValueChange={(value: number[]) => {
                             const next = value[0];
                             if (typeof next === "number") {
@@ -397,7 +414,7 @@ export function Preferences() {
                           className="overlay-range"
                         />
                         <div className="panel-value">
-                          {Math.round(config.appearance.panel_opacity * 100)}%
+                          {Math.round(sliderOpacityValue * 100)}%
                         </div>
                       </PanelRow>
                     </PanelStack>

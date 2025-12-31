@@ -20,6 +20,10 @@ import { useOllamaHealth } from "./hooks/useOllamaHealth";
 import { OverlayHeader } from "./components/OverlayHeader";
 import { DEFAULT_OVERLAY_CONFIG, type OverlayConfig } from "../shared/config";
 import { useTauriEvent } from "../shared/hooks/useTauriEvent";
+import {
+  clampPanelOpacity,
+  getPanelOpacityRange,
+} from "../shared/platform";
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
 import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";       
 
@@ -46,6 +50,7 @@ export function Overlay() {
   const [keybinds, setKeybinds] = useState(
     DEFAULT_OVERLAY_CONFIG.keybinds,
   );
+  const panelOpacityRange = useMemo(() => getPanelOpacityRange(), []);
   const [isCapturing, setIsCapturing] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const consentResolver = useRef<
@@ -80,13 +85,16 @@ export function Overlay() {
     applyConfig(event.payload);
   });
 
-  const applyPanelOpacity = useCallback((value: number) => {
-    const clamped = Math.min(1, Math.max(0.6, value));
-    document.documentElement.style.setProperty(
-      "--overlay-panel-opacity",
-      clamped.toString(),
-    );
-  }, []);
+  const applyPanelOpacity = useCallback(
+    (value: number) => {
+      const clamped = clampPanelOpacity(value, panelOpacityRange);
+      document.documentElement.style.setProperty(
+        "--overlay-panel-opacity",
+        clamped.toString(),
+      );
+    },
+    [panelOpacityRange],
+  );
 
   useEffect(() => {
     let active = true;

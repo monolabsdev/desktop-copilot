@@ -13,7 +13,10 @@ pub struct ClipboardText {
 }
 
 #[tauri::command]
-pub fn read_clipboard_text(app: AppHandle, max_chars: Option<usize>) -> Result<ClipboardText, String> {
+pub fn read_clipboard_text(
+    app: AppHandle,
+    max_chars: Option<usize>,
+) -> Result<ClipboardText, String> {
     let config = crate::config::load_overlay_config(&app);
     if let Some(enabled) = config.tools.tool_toggles.get("clipboard_context") {
         if !*enabled {
@@ -25,8 +28,7 @@ pub fn read_clipboard_text(app: AppHandle, max_chars: Option<usize>) -> Result<C
         .unwrap_or(DEFAULT_MAX_CHARS)
         .clamp(1, MAX_MAX_CHARS);
 
-    let mut clipboard =
-        Clipboard::new().map_err(|err| format!("Clipboard unavailable: {err}"))?;
+    let mut clipboard = Clipboard::new().map_err(|err| format!("Clipboard unavailable: {err}"))?;
     let text = clipboard
         .get_text()
         .map_err(|err| format!("Clipboard read failed: {err}"))?;

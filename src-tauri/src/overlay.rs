@@ -146,11 +146,7 @@ pub fn toggle_overlay(app: tauri::AppHandle, state: State<OverlayState>) {
 }
 
 #[tauri::command]
-pub fn set_overlay_visibility(
-    app: tauri::AppHandle,
-    state: State<OverlayState>,
-    visible: bool,
-) {
+pub fn set_overlay_visibility(app: tauri::AppHandle, state: State<OverlayState>, visible: bool) {
     if let Some(window) = app.webview_windows().get("overlay") {
         if visible {
             println!("Showing overlay (command)");

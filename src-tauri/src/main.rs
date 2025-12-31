@@ -99,11 +99,13 @@ fn main() {
                         .decorations(true);
                         #[cfg(any(target_os = "windows", target_os = "macos"))]
                         let builder = builder.transparent(true);
-                        let window = builder.build();
+                        let preferences_window = builder.build();
                         #[cfg(target_os = "macos")]
-                        if let Ok(window) = window.as_ref() {
+                        if let Ok(window) = preferences_window.as_ref() {
                             apply_macos_vibrancy(window);
                         }
+                        #[cfg(not(target_os = "macos"))]
+                        let _ = preferences_window;
                     }
                     // adds the event for the quit menu uitem
                     "quit" => app.exit(0),
