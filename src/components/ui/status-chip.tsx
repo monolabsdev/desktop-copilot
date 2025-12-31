@@ -28,18 +28,18 @@ const VARIANTS: Record<string, StatusSpec> = {
     className: "border-slate-300/40 text-slate-100/80 bg-slate-500/10",
     tooltip: "Reduced scope or caps apply.",
   },
-  connected: {
-    label: "Connected",
-    className: "border-emerald-300/40 text-emerald-100/90 bg-emerald-500/10",
-    dotClassName: "bg-emerald-300",
-    tooltip: "Ollama is reachable.",
-  },
-  disconnected: {
-    label: "Disconnected",
-    className: "border-red-300/40 text-red-100/90 bg-red-500/10",
-    dotClassName: "bg-red-300",
-    tooltip: "Ollama is not reachable.",
-  },
+  // connected: {
+  //   label: "Connected",
+  //   className: "border-emerald-300/40 text-emerald-100/90 bg-emerald-500/10",
+  //   dotClassName: "bg-emerald-300",
+  //   tooltip: "Ollama is reachable.",
+  // },
+  // disconnected: {
+  //   label: "Disconnected",
+  //   className: "border-red-300/40 text-red-100/90 bg-red-500/10",
+  //   dotClassName: "bg-red-300",
+  //   tooltip: "Ollama is not reachable.",
+  // },
 };
 
 type StatusVariant = keyof typeof VARIANTS;
