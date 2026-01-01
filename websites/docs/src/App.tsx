@@ -1,34 +1,48 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import "@/app/App.css"
+import "./docs-overrides.css"
+import type { ThemeMode } from "./lib/docs-types"
+import { DocsShell } from "./pages/DocsShell"
+
+const THEME_STORAGE_KEY = "docs-theme"
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [theme, setTheme] = useState<ThemeMode>("light")
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+    const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")
+      ?.matches
+    if (stored === "dark" || stored === "light") {
+      setTheme(stored)
+      document.documentElement.classList.toggle("dark", stored === "dark")
+    } else if (prefersDark) {
+      setTheme("dark")
+      document.documentElement.classList.add("dark")
+    }
+  }, [])
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark"
+    setTheme(next)
+    document.documentElement.classList.toggle("dark", next === "dark")
+    window.localStorage.setItem(THEME_STORAGE_KEY, next)
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <BrowserRouter
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
+      <Routes>
+        <Route path="/" element={<Navigate to="/docs/introduction" replace />} />
+        <Route
+          path="/docs/:slug"
+          element={<DocsShell theme={theme} toggleTheme={toggleTheme} />}
+        />
+        <Route path="*" element={<Navigate to="/docs/introduction" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

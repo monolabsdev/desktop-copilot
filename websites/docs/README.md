@@ -5,6 +5,7 @@
 - Ollama must be running locally; for Windows debugging there is a helper that sets `OLLAMA_ORIGINS="*"` before `ollama serve` (`scripts/start-ollama.ps1:1`).
 - The renderer picks overlay vs. preferences via the `?view=preferences` query param, so changes to either screen land in the same tree rooted at `src/app/App.tsx:1`.
 
+
 ## Tools & AI integration
 - Build new tools by copying `src/overlay/tools/toolTemplate.ts:3`, filling in the schema/parameters, and naming the function the model should call.
 - Register the tool inside `TOOL_REGISTRY` so the UI and routing know about it; the registration block around `src/overlay/tools/registry.ts:81` also shows how to describe the tool, expose UI labels, and gate it with `isEnabled` logic (`src/overlay/tools/registry.ts:141`).

@@ -16,6 +16,7 @@ interface Props {
   footer?: ReactNode
   children?: ReactNode
   className?: string
+  portal?: boolean
   onOpenChange?: (open: boolean) => void
 }
 
@@ -26,12 +27,14 @@ export function ModalShell({
   footer,
   children,
   className,
+  portal,
   onOpenChange,
 }: Props) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
+        portal={portal}
         className={cn("bg-neutral-950/90 text-white/90 border-white/10", className)}
       >
         <DialogHeader>

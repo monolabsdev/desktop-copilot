@@ -6,6 +6,7 @@ interface Props {
   error: string | null;
   onDownload: () => void;
   onRetry: () => void;
+  portal?: boolean;
 }
 
 export function OllamaRequiredModal({
@@ -13,10 +14,12 @@ export function OllamaRequiredModal({
   error,
   onDownload,
   onRetry,
+  portal,
 }: Props) {
   return (
     <ModalShell
       isOpen={isOpen}
+      portal={portal}
       title="Ollama is required"
       description="To use AI, install and run Ollama on this machine."
       footer={

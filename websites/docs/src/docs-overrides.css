@@ -1,0 +1,67 @@
+html,
+body {
+  height: auto !important;
+  overflow: auto !important;
+  overscroll-behavior: auto !important;
+}
+
+#root {
+  min-height: 100vh;
+  overflow: visible;
+}
+
+.docs-preview-sandbox {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.docs-preview-sandbox .panel-root {
+  position: static;
+  inset: auto;
+}
+
+.docs-preview-sandbox .panel-stage {
+  position: static;
+  inset: auto;
+  display: block;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.docs-preview-sandbox .panel-frame {
+  height: auto;
+}
+
+.docs-preview-sandbox .panel-frame--overlay {
+  width: 100%;
+  min-width: 0;
+  max-width: 36rem;
+  max-height: none;
+}
+
+.docs-modal-preview [data-slot="dialog-overlay"] {
+  position: absolute;
+  inset: 0;
+}
+
+.docs-modal-preview [data-slot="dialog-content"] {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(100% - 2rem);
+  max-width: 26rem;
+  transform: translate(-50%, -50%);
+}
+
+.docs-preview-sandbox .overlay-panel {
+  cursor: default;
+}
+
+.docs-preview-sandbox .overlay-panel:active {
+  cursor: default;
+}
+
+.docs-preview-sandbox .overlay-capture-notice {
+  position: static;
+  transform: none;
+  margin-bottom: 0.75rem;
+}
