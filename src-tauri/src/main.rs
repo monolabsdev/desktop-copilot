@@ -55,8 +55,9 @@ fn main() {
 
             shortcuts::register_overlay_shortcut(&handle, &config);
             if let Some(window) = app.webview_windows().get("overlay") {
-                #[cfg(target_os = "macos")]
-                apply_macos_vibrancy(window);
+                // macOS vibrancy disabled for now to avoid resize issues.
+                // #[cfg(target_os = "macos")]
+                // apply_macos_vibrancy(window);
                 let state = app.state::<overlay::OverlayState>();
                 overlay::snap_overlay_to_corner(window, state.current_corner());
                 let handle_for_events = handle.clone();
@@ -100,10 +101,11 @@ fn main() {
                         #[cfg(any(target_os = "windows", target_os = "macos"))]
                         let builder = builder.transparent(true);
                         let preferences_window = builder.build();
-                        #[cfg(target_os = "macos")]
-                        if let Ok(window) = preferences_window.as_ref() {
-                            apply_macos_vibrancy(window);
-                        }
+                        // macOS vibrancy disabled for now to avoid resize issues.
+                        // #[cfg(target_os = "macos")]
+                        // if let Ok(window) = preferences_window.as_ref() {
+                        //     apply_macos_vibrancy(window);
+                        // }
                         #[cfg(not(target_os = "macos"))]
                         let _ = preferences_window;
                     }

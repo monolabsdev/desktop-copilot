@@ -27,7 +27,6 @@ import {
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
 import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
 
-const MIN_OVERLAY_WIDTH = 360;
 const MIN_OVERLAY_HEIGHT = 320;
 
 const wait = (duration: number) =>
@@ -134,10 +133,7 @@ export function Overlay() {
     const devicePixelRatio =
       typeof window === "undefined" ? 1 : window.devicePixelRatio ?? 1;
     const rect = element.getBoundingClientRect();
-    const targetWidth = Math.max(
-      MIN_OVERLAY_WIDTH,
-      Math.ceil(rect.width * devicePixelRatio),
-    );
+    const targetWidth = Math.ceil(rect.width * devicePixelRatio);
     const targetHeight = Math.max(
       MIN_OVERLAY_HEIGHT,
       Math.ceil(rect.height * devicePixelRatio),

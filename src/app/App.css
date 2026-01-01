@@ -64,9 +64,9 @@ body[data-view="preferences"] {
 }
 
 .panel-frame--overlay {
-    width: min(560px, calc(100vw - 2rem));
-    min-width: min(560px, calc(100vw - 2rem));
-    max-width: min(560px, calc(100vw - 2rem));
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
     max-height: calc(100vh - 2rem);
     height: auto;
     min-height: 0;
