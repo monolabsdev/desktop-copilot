@@ -6,6 +6,22 @@ Versions marked `dev` indicate unstable development builds.
 
 ---
 
+## [0.2.0-rc.1] (Unreleased)
+This release candidate stabilizes window sizing, chat input behavior, and macOS window effects.
+
+### Changed
+- Temporarily removed macOS window vibrancy
+- Disabled clipboard context tool registration pending further research
+
+### Fixed
+- Dynamic window resizing behavior in Tauri (refer to: https://github.com/tauri-apps/tauri/issues/12420) 
+- Chat input focus/overflow issues that could trap input
+
+### Notes
+- Preparation commit for the release candidate
+
+---
+
 ## [0.2.0-dev.3] 
 This development release expands context capture, adds macOS groundwork, and refines the overlay UI.
 
