@@ -26,6 +26,7 @@ import {
 } from "../shared/platform";
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
 import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
+import { CLIPBOARD_CONTEXT_TOOL_NAME } from "./tools/clipboardContext";
 
 const MIN_OVERLAY_HEIGHT = 320;
 
@@ -267,11 +268,10 @@ export function Overlay() {
     ...toolToggles,
     capture_screen_image: captureToolEnabled,
     web_search: webSearchEnabled,
+    // Keep clipboard context disabled unless explicitly re-enabled elsewhere.
+    [CLIPBOARD_CONTEXT_TOOL_NAME]: false,
   };
-  const toolsEnabled =
-    captureToolEnabled ||
-    webSearchEnabled ||
-    Object.values(mergedToolToggles).some(Boolean);
+  const toolsEnabled = Object.values(mergedToolToggles).some(Boolean);
   const ollamaChat = useOllamaChat(DEFAULT_MODEL, {
     toolsEnabled,
     captureToolEnabled,
@@ -319,52 +319,55 @@ export function Overlay() {
       <PanelRoot variant="overlay">
         {isCapturing && <OverlayCaptureNotice />}
         <PanelStage>
-            <PanelFrame
-              variant="overlay"
-              ref={panelFrameRef}
-              className="overlay-panel"
-              onPointerDown={handlePanelPointerDown}
-            >
-              {(hasMessages || error) && (
-                <div className="overlay-panel-body">
+          <PanelFrame
+            variant="overlay"
+            ref={panelFrameRef}
+            className="overlay-panel"
+            onPointerDown={handlePanelPointerDown}
+          >
+            {(hasMessages || error) && (
+              <div className="overlay-panel-body">
+                {hasMessages && (
+                  <OverlayHeader
+                    isBusy={isSending}
+                    hasMessages
+                    onClearHistory={clearHistory}
+                  />
+                )}
+                <div
+                  className="overlay-panel-body-scroll"
+                  data-scroll-container
+                >
                   {hasMessages && (
-                    <OverlayHeader
-                      isBusy={isSending}
-                      hasMessages
-                      onClearHistory={clearHistory}
+                    <MessageList
+                      messages={messages}
+                      isSending={isSending}
+                      showThinking={showThinking}
+                      ollamaConnected={ollamaConnected}
+                      canRegenerate={canRegenerate}
+                      onRegenerate={regenerateLastResponse}
                     />
                   )}
-                  <div className="overlay-panel-body-scroll" data-scroll-container>
-                    {hasMessages && (
-                      <MessageList
-                        messages={messages}
-                        isSending={isSending}
-                        showThinking={showThinking}
-                        ollamaConnected={ollamaConnected}
-                        canRegenerate={canRegenerate}
-                        onRegenerate={regenerateLastResponse}
-                      />
-                    )}
-                    {error && (
-                      <div className="overlay-panel-error px-4 pb-2 text-sm text-red-400">
-                        {error}
-                      </div>
-                    )}
-                  </div>
+                  {error && (
+                    <div className="overlay-panel-error px-4 pb-2 text-sm text-red-400">
+                      {error}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Input */}
-              <ChatInput
-                input={input}
-                setInput={setInput}
-                isSending={isSending}
-                onSend={sendMessage}
-                onCancel={cancelSend}
-                inputRef={inputRef}
-                history={inputHistory}
-              />
-            </PanelFrame>
+            {/* Input */}
+            <ChatInput
+              input={input}
+              setInput={setInput}
+              isSending={isSending}
+              onSend={sendMessage}
+              onCancel={cancelSend}
+              inputRef={inputRef}
+              history={inputHistory}
+            />
+          </PanelFrame>
         </PanelStage>
       </PanelRoot>
       <CaptureConsentModal

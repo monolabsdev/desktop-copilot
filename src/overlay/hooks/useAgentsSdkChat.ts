@@ -39,7 +39,7 @@ const AGENT_INSTRUCTIONS =
   "You are a fast, minimal desktop assistant. " +
   "Keep answers concise, structured, and actionable. " +
   "Use the screenshot tool only when it helps answer the user's request. " +
-  "Never send the screenshot back to the user; they already have it.";      
+  "Never send the screenshot back to the user; they already have it.";
 
 const OLLAMA_BASE_URL = "http://localhost:11434/v1";
 const DEFAULT_CLIPBOARD_MAX_CHARS = 4000;
@@ -84,6 +84,11 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     };
     setMessages((prev) => appendScreenshotMessage(prev, message));
     toolActivityRef.current = undefined;
+  };
+  const addToolActivity = (activity: string) => {
+    toolActivityRef.current = toolActivityRef.current
+      ? [...toolActivityRef.current, activity]
+      : [activity];
   };
 
   const ensureAgent = () => {
@@ -208,9 +213,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
           return "Clipboard tool is disabled.";
         }
         const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
-        toolActivityRef.current = toolActivityRef.current
-          ? [...toolActivityRef.current, activity]
-          : [activity];
+        addToolActivity(activity);
         setToolUsage({ inProgress: true, name: CLIPBOARD_CONTEXT_TOOL_NAME });
         try {
           const maxChars =
@@ -233,11 +236,15 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
         }
       },
     });
+    const agentTools = [captureTool];
+    if (isToolEnabled(CLIPBOARD_CONTEXT_TOOL_NAME, options)) {
+      agentTools.push(clipboardTool);
+    }
     agentRef.current = new Agent({
       name: "Overlay Assistant",
       instructions: AGENT_INSTRUCTIONS,
       model: nextConfig.model,
-      tools: [captureTool, clipboardTool],
+      tools: agentTools,
     });
     agentConfigRef.current = nextConfig;
   };
@@ -402,9 +409,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
               ),
             ]);
             const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
-            toolActivityRef.current = toolActivityRef.current
-              ? [...toolActivityRef.current, activity]
-              : [activity];
+            addToolActivity(activity);
           }
         } catch {
           // Ignore clipboard errors and continue without it.

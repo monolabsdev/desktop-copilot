@@ -94,6 +94,17 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       prev.filter((message) => message.streamId !== pendingId),
     );
   };
+  const syncPendingToolActivity = (next: string[]) => {
+    const pendingId = pendingToolMessageIdRef.current;
+    if (pendingId === null) return;
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.streamId === pendingId
+          ? { ...message, toolActivity: next }
+          : message,
+      ),
+    );
+  };
   const toolHandlerOptions: ToolOptions = {
     toolsEnabled: options?.toolsEnabled ?? false,
     captureToolEnabled: options?.captureToolEnabled ?? false,
@@ -121,16 +132,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
           entry === replacement.from ? replacement.to : entry,
         );
         toolActivityRef.current = next;
-        if (pendingToolMessageIdRef.current !== null) {
-          const pendingId = pendingToolMessageIdRef.current;
-          setMessages((prev) =>
-            prev.map((message) =>
-              message.streamId === pendingId
-                ? { ...message, toolActivity: next }
-                : message,
-            ),
-          );
-        }
+        syncPendingToolActivity(next);
         return;
       }
       if (current.length > 0 && current[current.length - 1] === activity) {
@@ -138,16 +140,7 @@ export function useOllamaChat(model: string, options?: ToolOptions) {
       }
       const next = current.length ? [...current, activity] : [activity];
       toolActivityRef.current = next;
-      if (pendingToolMessageIdRef.current !== null) {
-        const pendingId = pendingToolMessageIdRef.current;
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.streamId === pendingId
-              ? { ...message, toolActivity: next }
-              : message,
-          ),
-        );
-      }
+      syncPendingToolActivity(next);
     },
   };
 
