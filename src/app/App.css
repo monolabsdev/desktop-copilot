@@ -261,7 +261,6 @@ body[data-view="preferences"] {
     scrollbar-gutter: stable;
 }
 
-
 .overlay-panel-error {
     flex-shrink: 0;
     padding-top: 0.5rem;
@@ -327,7 +326,7 @@ body[data-view="preferences"] {
 
 .overlay-chat-input {
     border-top: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(10, 10, 10, calc(var(--overlay-panel-opacity) * 0.35));    
+    background: rgba(10, 10, 10, calc(var(--overlay-panel-opacity) * 0.35));
     flex-shrink: 0;
 }
 

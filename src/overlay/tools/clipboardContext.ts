@@ -14,7 +14,8 @@ export const CLIPBOARD_CONTEXT_TOOL: Tool = {
       properties: {
         max_chars: {
           type: "number",
-          description: "Maximum number of characters to read from the clipboard.",
+          description:
+            "Maximum number of characters to read from the clipboard.",
         },
       },
       required: [],

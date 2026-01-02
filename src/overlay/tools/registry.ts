@@ -450,7 +450,8 @@ const webSearchTool: RegisteredTool = {
 
 export const TOOL_REGISTRY: RegisteredTool[] = [
   captureTool,
-  clipboardTool,
+  // Clipboard tool intentionally not registered; uncomment to enable.
+  // clipboardTool,
   webSearchTool,
 ];
 
