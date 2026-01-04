@@ -285,14 +285,14 @@ const captureTool: RegisteredTool = {
 
 const getMaxClipboardChars = (args: unknown) => {
   if (!args || typeof args !== "object") return DEFAULT_CLIPBOARD_MAX_CHARS;
-  const raw = "max_chars" in args ? (args as { max_chars?: unknown }).max_chars : undefined;
+  const raw =
+    "max_chars" in args
+      ? (args as { max_chars?: unknown }).max_chars
+      : undefined;
   if (typeof raw !== "number" || Number.isNaN(raw)) {
     return DEFAULT_CLIPBOARD_MAX_CHARS;
   }
-  return Math.min(
-    MAX_CLIPBOARD_MAX_CHARS,
-    Math.max(1, Math.floor(raw)),
-  );
+  return Math.min(MAX_CLIPBOARD_MAX_CHARS, Math.max(1, Math.floor(raw)));
 };
 
 const clipboardTool: RegisteredTool = {
@@ -358,6 +358,8 @@ const clipboardTool: RegisteredTool = {
     return true;
   },
 };
+
+void clipboardTool; // keep defined so it can be re-enabled without redefining the handler.
 
 const webSearchTool: RegisteredTool = {
   name: WEB_SEARCH_TOOL_NAME,
