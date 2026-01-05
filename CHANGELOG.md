@@ -6,7 +6,7 @@ Versions marked `dev` indicate unstable development builds.
 
 ---
 
-## [0.2.0-rc.1] (Unreleased)
+## [0.2.0-rc.1] (Release Candidate)
 This release candidate stabilizes window sizing, chat input behavior, and macOS window effects.
 
 ### Changed
