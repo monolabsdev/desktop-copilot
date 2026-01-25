@@ -8,8 +8,17 @@ import {
   CLIPBOARD_CONTEXT_TOOL,
   CLIPBOARD_CONTEXT_TOOL_NAME,
 } from "./clipboardContext";
+import { LIST_PROJECT_FILES_TOOL, LIST_PROJECT_FILES_TOOL_NAME } from "./listProjectFiles";
+import { READ_FILE_TOOL, READ_FILE_TOOL_NAME } from "./readFile";
+import { SEARCH_IN_FILES_TOOL, SEARCH_IN_FILES_TOOL_NAME } from "./searchInFiles";
+import { WRITE_FILE_TOOL, WRITE_FILE_TOOL_NAME } from "./writeFile";
 import { WEB_SEARCH_TOOL } from "./webSearch";
-import { ClipboardIcon, GlobeIcon, MonitorIcon } from "lucide-react";
+import {
+  ClipboardIcon,
+  FilePenLineIcon,
+  GlobeIcon,
+  MonitorIcon,
+} from "lucide-react";
 
 type InvokeFn = (
   command: string,
@@ -130,6 +139,10 @@ export type RegisteredTool = {
 const CAPTURE_TOOL_NAME = "capture_screen_image";
 const CLIPBOARD_TOOL_NAME = CLIPBOARD_CONTEXT_TOOL_NAME;
 const WEB_SEARCH_TOOL_NAME = "web_search";
+const WRITE_TOOL_NAME = WRITE_FILE_TOOL_NAME;
+const READ_TOOL_NAME = READ_FILE_TOOL_NAME;
+const LIST_FILES_TOOL_NAME = LIST_PROJECT_FILES_TOOL_NAME;
+const SEARCH_TOOL_NAME = SEARCH_IN_FILES_TOOL_NAME;
 const DEFAULT_CLIPBOARD_MAX_CHARS = 4000;
 const MAX_CLIPBOARD_MAX_CHARS = 20000;
 
@@ -144,6 +157,10 @@ export const isToolEnabled = (name: string, options?: ToolOptions) => {
   if (typeof toggleValue === "boolean") return toggleValue;
   if (name === CAPTURE_TOOL_NAME) return !!options?.captureToolEnabled;
   if (name === WEB_SEARCH_TOOL_NAME) return !!options?.webSearchEnabled;
+  const tool = getToolDefinition(name);
+  if (tool?.preferences && "defaultEnabled" in tool.preferences) {
+    return tool.preferences.defaultEnabled ?? true;
+  }
   return true;
 };
 
@@ -160,6 +177,7 @@ const captureTool: RegisteredTool = {
   },
   activityLabel: "Capturing screen...",
   completedLabel: "Captured screen.",
+  activityShimmer: true,
   isEnabled: (options) =>
     isToolEnabled(CAPTURE_TOOL_NAME, options) &&
     typeof options?.requestScreenCapture === "function",
@@ -361,6 +379,329 @@ const clipboardTool: RegisteredTool = {
 
 void clipboardTool; // keep defined so it can be re-enabled without redefining the handler.
 
+const listProjectFilesTool: RegisteredTool = {
+  name: LIST_FILES_TOOL_NAME,
+  tool: LIST_PROJECT_FILES_TOOL,
+  displayName: "list project files",
+  preferences: {
+    label: "Project file listing",
+    description: "Let the assistant list files to locate where to edit.",
+    defaultEnabled: true,
+    showInPreferences: true,
+    statuses: ["preview"],
+  },
+  activityLabel: "Listing project files...",
+  completedLabel: "Listed project files.",
+  activityShimmer: true,
+  isEnabled: (options) => isToolEnabled(LIST_FILES_TOOL_NAME, options),
+  handler: async ({
+    toolCall,
+    toolCalls,
+    baseMessages,
+    options,
+    invoke,
+    appendHistory,
+    streamFollowup,
+    buildToolMessage,
+  }) => {
+    if (!isToolEnabled(LIST_FILES_TOOL_NAME, options)) {
+      const toolMessage = buildToolMessage(LIST_FILES_TOOL_NAME, {
+        error: "Project file listing is disabled.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    const args = toolCall?.function?.arguments ?? {};
+    const root = typeof args.root === "string" ? args.root.trim() : undefined;
+    const maxFiles =
+      typeof args.max_files === "number"
+        ? args.max_files
+        : typeof args.maxFiles === "number"
+          ? args.maxFiles
+          : undefined;
+
+    let listResponse: unknown = null;
+    try {
+      listResponse = await invoke("list_project_files", {
+        root,
+        max_files: maxFiles,
+      });
+    } catch (err) {
+      throw new Error(toErrorMessage(err, "Project file listing failed."));
+    }
+
+    const toolPayload =
+      listResponse && typeof listResponse === "object"
+        ? listResponse
+        : { root, files: [] };
+    const toolMessage = buildToolMessage(LIST_FILES_TOOL_NAME, toolPayload);
+
+    appendHistory([
+      { role: "assistant", content: "", tool_calls: toolCalls },
+      toolMessage,
+    ]);
+
+    await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+    return true;
+  },
+};
+
+const readFileTool: RegisteredTool = {
+  name: READ_TOOL_NAME,
+  tool: READ_FILE_TOOL,
+  displayName: "read file",
+  preferences: {
+    label: "Read file",
+    description: "Let the assistant read small text files for context.",
+    defaultEnabled: true,
+    showInPreferences: true,
+  },
+  activityLabel: "Reading file...",
+  completedLabel: "Read file.",
+  activityShimmer: true,
+  isEnabled: (options) => isToolEnabled(READ_TOOL_NAME, options),
+  handler: async ({
+    toolCall,
+    toolCalls,
+    baseMessages,
+    options,
+    invoke,
+    appendHistory,
+    streamFollowup,
+    buildToolMessage,
+  }) => {
+    if (!isToolEnabled(READ_TOOL_NAME, options)) {
+      const toolMessage = buildToolMessage(READ_TOOL_NAME, {
+        error: "Read file tool is disabled.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    const args = toolCall?.function?.arguments ?? {};
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    if (!path) {
+      const toolMessage = buildToolMessage(READ_TOOL_NAME, {
+        error: "Path is required.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    let readResponse: unknown = null;
+    try {
+      readResponse = await invoke("read_file", { path });
+    } catch (err) {
+      throw new Error(toErrorMessage(err, "Read file failed."));
+    }
+
+    const toolPayload =
+      readResponse && typeof readResponse === "object"
+        ? readResponse
+        : { path, content: "" };
+    const toolMessage = buildToolMessage(READ_TOOL_NAME, toolPayload);
+
+    appendHistory([
+      { role: "assistant", content: "", tool_calls: toolCalls },
+      toolMessage,
+    ]);
+
+    await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+    return true;
+  },
+};
+
+const searchInFilesTool: RegisteredTool = {
+  name: SEARCH_TOOL_NAME,
+  tool: SEARCH_IN_FILES_TOOL,
+  displayName: "search in files",
+  preferences: {
+    label: "Search in files",
+    description: "Let the assistant search across files to find relevant code.",
+    defaultEnabled: true,
+    showInPreferences: true,
+    statuses: ["preview"],
+  },
+  activityLabel: "Searching files...",
+  completedLabel: "Searched files.",
+  activityShimmer: true,
+  isEnabled: (options) => isToolEnabled(SEARCH_TOOL_NAME, options),
+  handler: async ({
+    toolCall,
+    toolCalls,
+    baseMessages,
+    options,
+    invoke,
+    appendHistory,
+    streamFollowup,
+    buildToolMessage,
+  }) => {
+    if (!isToolEnabled(SEARCH_TOOL_NAME, options)) {
+      const toolMessage = buildToolMessage(SEARCH_TOOL_NAME, {
+        error: "Search tool is disabled.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    const args = toolCall?.function?.arguments ?? {};
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    const root = typeof args.root === "string" ? args.root.trim() : undefined;
+    const maxResults =
+      typeof args.max_results === "number"
+        ? args.max_results
+        : typeof args.maxResults === "number"
+          ? args.maxResults
+          : undefined;
+    const caseInsensitive =
+      typeof args.case_insensitive === "boolean"
+        ? args.case_insensitive
+        : typeof args.caseInsensitive === "boolean"
+          ? args.caseInsensitive
+          : false;
+
+    if (!query) {
+      const toolMessage = buildToolMessage(SEARCH_TOOL_NAME, {
+        error: "Query is required.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    let searchResponse: unknown = null;
+    try {
+      searchResponse = await invoke("search_in_files", {
+        query,
+        root,
+        max_results: maxResults,
+        case_insensitive: caseInsensitive,
+      });
+    } catch (err) {
+      throw new Error(toErrorMessage(err, "Search failed."));
+    }
+
+    const toolPayload =
+      searchResponse && typeof searchResponse === "object"
+        ? searchResponse
+        : { query, matches: [] };
+    const toolMessage = buildToolMessage(SEARCH_TOOL_NAME, toolPayload);
+
+    appendHistory([
+      { role: "assistant", content: "", tool_calls: toolCalls },
+      toolMessage,
+    ]);
+
+    await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+    return true;
+  },
+};
+
+const writeFileTool: RegisteredTool = {
+  name: WRITE_TOOL_NAME,
+  tool: WRITE_FILE_TOOL,
+  displayName: "write file",
+  icon: FilePenLineIcon,
+  preferences: {
+    label: "Write file",
+    description: "Allow the assistant to write files on disk.",
+    defaultEnabled: false,
+    showInPreferences: true,
+    statuses: ["experimental"],
+  },
+  activityLabel: "Writing file...",
+  completedLabel: "Wrote file.",
+  activityShimmer: true,
+  isEnabled: (options) => isToolEnabled(WRITE_TOOL_NAME, options),
+  handler: async ({
+    toolCall,
+    toolCalls,
+    baseMessages,
+    options,
+    invoke,
+    appendHistory,
+    streamFollowup,
+    buildToolMessage,
+  }) => {
+    if (!isToolEnabled(WRITE_TOOL_NAME, options)) {
+      const toolMessage = buildToolMessage(WRITE_TOOL_NAME, {
+        error: "Write file tool is disabled.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    const args = toolCall?.function?.arguments ?? {};
+    const path = typeof args.path === "string" ? args.path.trim() : "";
+    const content = typeof args.content === "string" ? args.content : "";
+    const append = typeof args.append === "boolean" ? args.append : false;
+    const createDirs =
+      typeof args.create_dirs === "boolean" ? args.create_dirs : true;
+
+    if (!path) {
+      const toolMessage = buildToolMessage(WRITE_TOOL_NAME, {
+        error: "Path is required.",
+      });
+      appendHistory([
+        { role: "assistant", content: "", tool_calls: toolCalls },
+        toolMessage,
+      ]);
+      await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+      return true;
+    }
+
+    let writeResponse: unknown = null;
+    try {
+      writeResponse = await invoke("write_file", {
+        path,
+        content,
+        append,
+        create_dirs: createDirs,
+      });
+    } catch (err) {
+      throw new Error(toErrorMessage(err, "Write file failed."));
+    }
+
+    const toolPayload =
+      writeResponse && typeof writeResponse === "object"
+        ? writeResponse
+        : { path, bytes: content.length, appended: append };
+    const toolMessage = buildToolMessage(WRITE_TOOL_NAME, toolPayload);
+
+    appendHistory([
+      { role: "assistant", content: "", tool_calls: toolCalls },
+      toolMessage,
+    ]);
+
+    await streamFollowup(baseMessages, toolCalls, toolMessage, []);
+    return true;
+  },
+};
+
 const webSearchTool: RegisteredTool = {
   name: WEB_SEARCH_TOOL_NAME,
   tool: WEB_SEARCH_TOOL,
@@ -452,6 +793,10 @@ const webSearchTool: RegisteredTool = {
 
 export const TOOL_REGISTRY: RegisteredTool[] = [
   captureTool,
+  listProjectFilesTool,
+  readFileTool,
+  searchInFilesTool,
+  writeFileTool,
   // Clipboard tool intentionally not registered; uncomment to enable.
   // clipboardTool,
   webSearchTool,
@@ -521,4 +866,12 @@ export function getToolActivityReplacement(activity: string) {
   );
   if (!tool || !tool.activityLabel) return null;
   return { from: tool.activityLabel, to: activity };
+}
+
+export function getToolCompletionForActivity(activity: string) {
+  const tool = TOOL_REGISTRY.find(
+    (entry) => (entry.activityLabel ?? getToolActivityLabel(entry.name)) === activity,
+  );
+  if (!tool) return activity;
+  return tool.completedLabel ?? getToolCompletedLabel(tool.name);
 }

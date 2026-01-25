@@ -27,6 +27,7 @@ import {
 import { PanelFrame, PanelRoot, PanelStage } from "@/components/layout/panel";
 import { OverlayCaptureNotice } from "./components/OverlayCaptureNotice";
 import { CLIPBOARD_CONTEXT_TOOL_NAME } from "./tools/clipboardContext";
+import { isToolEnabled, TOOL_REGISTRY } from "./tools/registry";
 
 const MIN_OVERLAY_HEIGHT = 320;
 
@@ -271,7 +272,14 @@ export function Overlay() {
     // Keep clipboard context disabled unless explicitly re-enabled elsewhere.
     [CLIPBOARD_CONTEXT_TOOL_NAME]: false,
   };
-  const toolsEnabled = Object.values(mergedToolToggles).some(Boolean);
+  const toolsEnabled = TOOL_REGISTRY.some((tool) =>
+    isToolEnabled(tool.name, {
+      toolsEnabled: true,
+      captureToolEnabled,
+      webSearchEnabled,
+      toolToggles: mergedToolToggles,
+    }),
+  );
   const ollamaChat = useOllamaChat(DEFAULT_MODEL, {
     toolsEnabled,
     captureToolEnabled,

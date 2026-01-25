@@ -16,8 +16,18 @@ import { ollamaChat } from "../ollama/client";
 import type { ChatMessage, ToolOptions, ToolUsage } from "./ollama/types";
 import { toErrorMessage } from "./ollama/utils";
 import { appendScreenshotMessage } from "./ollama/screenshot";
-import { getToolActivityLabel, isToolEnabled } from "../tools/registry";
+import {
+  getToolActivityLabel,
+  getToolActivityReplacement,
+  getToolCompletedLabel,
+  isToolEnabled,
+  TOOL_REGISTRY,
+} from "../tools/registry";
 import { CLIPBOARD_CONTEXT_TOOL_NAME } from "../tools/clipboardContext";
+import { LIST_PROJECT_FILES_TOOL_NAME } from "../tools/listProjectFiles";
+import { READ_FILE_TOOL_NAME } from "../tools/readFile";
+import { SEARCH_IN_FILES_TOOL_NAME } from "../tools/searchInFiles";
+import { WRITE_FILE_TOOL_NAME } from "../tools/writeFile";
 
 type UseAgentsSdkOptions = ToolOptions & {
   model?: string;
@@ -38,6 +48,7 @@ type AgentsRunner = {
 const AGENT_INSTRUCTIONS =
   "You are a fast, minimal desktop assistant. " +
   "Keep answers concise, structured, and actionable. " +
+  "When editing code, locate relevant files with list/search/read tools before writing. " +
   "Use the screenshot tool only when it helps answer the user's request. " +
   "Never send the screenshot back to the user; they already have it.";
 
@@ -57,6 +68,8 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
   const toolsEnabled = options?.toolsEnabled ?? false;
   const requestIdRef = useRef(0);
   const streamMessageIdRef = useRef(0);
+  const activeStreamIdRef = useRef<number | null>(null);
+  const pendingToolMessageIdRef = useRef<number | null>(null);
   const historyRef = useRef<AgentInputItem[]>([]);
   const toolActivityRef = useRef<string[] | undefined>(undefined);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -67,6 +80,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     toolsEnabled,
     visionModel: options?.visionModel ?? VISION_MODEL,
   });
+  const maxTurns = 25;
 
   const appendLocalScreenshot = (
     filePath: string,
@@ -85,10 +99,70 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     setMessages((prev) => appendScreenshotMessage(prev, message));
     toolActivityRef.current = undefined;
   };
-  const addToolActivity = (activity: string) => {
-    toolActivityRef.current = toolActivityRef.current
-      ? [...toolActivityRef.current, activity]
-      : [activity];
+  const setToolActivities = (next: string[]) => {
+    const unique = Array.from(new Set(next));
+    toolActivityRef.current = unique;
+    setMessages((prev) => {
+      const targetId =
+        activeStreamIdRef.current ?? pendingToolMessageIdRef.current;
+      if (targetId !== null) {
+        return prev.map((message) =>
+          message.streamId === targetId
+            ? { ...message, toolActivity: unique }
+            : message,
+        );
+      }
+      const nextId = streamMessageIdRef.current + 1;
+      pendingToolMessageIdRef.current = nextId;
+      return [
+        ...prev,
+        {
+          role: "assistant",
+          content: "",
+          streamId: nextId,
+          toolActivity: unique,
+        },
+      ];
+    });
+  };
+
+  const pushToolActivity = (activity: string) => {
+    const current = toolActivityRef.current ?? [];
+    const replacement = getToolActivityReplacement(activity);
+    let next: string[] = current;
+    if (replacement && current.length > 0) {
+      next = current.map((entry) =>
+        entry === replacement.from ? replacement.to : entry,
+      );
+    } else if (!current.includes(activity)) {
+      next = [...current, activity];
+    }
+    if (next === current) return;
+    setToolActivities(next);
+  };
+
+  const completeToolActivity = (toolName: string) => {
+    const current = toolActivityRef.current ?? [];
+    const activity = getToolActivityLabel(toolName);
+    const completed = getToolCompletedLabel(toolName);
+    const withoutActivity = current.filter((entry) => entry !== activity);
+    const next = withoutActivity.includes(completed)
+      ? withoutActivity
+      : [...withoutActivity, completed];
+    setToolActivities(next);
+  };
+
+  const finalizeToolActivities = (activities?: string[]) => {
+    if (!activities || activities.length === 0) return activities;
+    const next = activities.map((entry) => {
+      const tool = TOOL_REGISTRY.find((item) => {
+        const label = item.activityLabel ?? getToolActivityLabel(item.name);
+        return label === entry;
+      });
+      if (!tool) return entry;
+      return tool.completedLabel ?? getToolCompletedLabel(tool.name);
+    });
+    return Array.from(new Set(next));
   };
 
   const ensureAgent = () => {
@@ -185,6 +259,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
           }
           return "Screenshot capture failed.";
         } finally {
+          completeToolActivity("capture_screen_image");
           setToolUsage({
             inProgress: false,
             name: "capture_screen_image",
@@ -213,7 +288,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
           return "Clipboard tool is disabled.";
         }
         const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
-        addToolActivity(activity);
+        pushToolActivity(activity);
         setToolUsage({ inProgress: true, name: CLIPBOARD_CONTEXT_TOOL_NAME });
         try {
           const maxChars =
@@ -228,6 +303,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
           }
           return response.text;
         } finally {
+          completeToolActivity(CLIPBOARD_CONTEXT_TOOL_NAME);
           setToolUsage({
             inProgress: false,
             name: CLIPBOARD_CONTEXT_TOOL_NAME,
@@ -236,10 +312,240 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
         }
       },
     });
-    const agentTools = [captureTool];
-    if (isToolEnabled(CLIPBOARD_CONTEXT_TOOL_NAME, options)) {
-      agentTools.push(clipboardTool);
-    }
+    const writeFileTool = tool({
+      name: WRITE_FILE_TOOL_NAME,
+      description:
+        "Write text to a file on disk. Overwrites by default; set append=true to append.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Absolute or project-relative file path to write.",
+          },
+          content: {
+            type: "string",
+            description: "Text content to write.",
+          },
+          append: {
+            type: "boolean",
+            description: "Append to the file instead of overwriting.",
+          },
+          create_dirs: {
+            type: "boolean",
+            description: "Create parent directories if needed.",
+          },
+        },
+        required: ["path", "content"],
+        additionalProperties: false,
+      },
+      strict: false,
+      execute: async (args?: {
+        path?: string;
+        content?: string;
+        append?: boolean;
+        create_dirs?: boolean;
+      }) => {
+        if (!isToolEnabled(WRITE_FILE_TOOL_NAME, options)) {
+          return "Write file tool is disabled.";
+        }
+        const path = typeof args?.path === "string" ? args.path.trim() : "";
+        const content = typeof args?.content === "string" ? args.content : "";
+        const append = typeof args?.append === "boolean" ? args.append : false;
+        const createDirs =
+          typeof args?.create_dirs === "boolean" ? args.create_dirs : true;
+        if (!path) return "Path is required.";
+
+        const activity = getToolActivityLabel(WRITE_FILE_TOOL_NAME);
+        pushToolActivity(activity);
+        setToolUsage({ inProgress: true, name: WRITE_FILE_TOOL_NAME });
+        try {
+          const response = await invoke("write_file", {
+            path,
+            content,
+            append,
+            create_dirs: createDirs,
+          });
+          return response ?? "Write complete.";
+        } catch (err) {
+          return toErrorMessage(err, "Write file failed.");
+        } finally {
+          completeToolActivity(WRITE_FILE_TOOL_NAME);
+          setToolUsage({
+            inProgress: false,
+            name: WRITE_FILE_TOOL_NAME,
+            lastUsedAt: Date.now(),
+          });
+        }
+      },
+    });
+    const listProjectFilesTool = tool({
+      name: LIST_PROJECT_FILES_TOOL_NAME,
+      description:
+        "List files under a project root so the assistant can choose where to read/write.",
+      parameters: {
+        type: "object",
+        properties: {
+          root: {
+            type: "string",
+            description:
+              "Project root path. Defaults to the app working directory.",
+          },
+          max_files: {
+            type: "number",
+            description: "Max number of files to return.",
+          },
+        },
+        additionalProperties: false,
+      },
+      strict: false,
+      execute: async (args?: { root?: string; max_files?: number }) => {
+        if (!isToolEnabled(LIST_PROJECT_FILES_TOOL_NAME, options)) {
+          return "Project file listing is disabled.";
+        }
+        const root = typeof args?.root === "string" ? args.root.trim() : undefined;
+        const maxFiles =
+          typeof args?.max_files === "number" ? args.max_files : undefined;
+        const activity = getToolActivityLabel(LIST_PROJECT_FILES_TOOL_NAME);
+        pushToolActivity(activity);
+        setToolUsage({ inProgress: true, name: LIST_PROJECT_FILES_TOOL_NAME });
+        try {
+          const response = await invoke("list_project_files", {
+            root,
+            max_files: maxFiles,
+          });
+          return response ?? "List complete.";
+        } catch (err) {
+          return toErrorMessage(err, "Project file listing failed.");
+        } finally {
+          completeToolActivity(LIST_PROJECT_FILES_TOOL_NAME);
+          setToolUsage({
+            inProgress: false,
+            name: LIST_PROJECT_FILES_TOOL_NAME,
+            lastUsedAt: Date.now(),
+          });
+        }
+      },
+    });
+    const readFileTool = tool({
+      name: READ_FILE_TOOL_NAME,
+      description: "Read a small text file from disk for context.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Absolute or project-relative file path to read.",
+          },
+        },
+        required: ["path"],
+        additionalProperties: false,
+      },
+      strict: false,
+      execute: async (args?: { path?: string }) => {
+        if (!isToolEnabled(READ_FILE_TOOL_NAME, options)) {
+          return "Read file tool is disabled.";
+        }
+        const path = typeof args?.path === "string" ? args.path.trim() : "";
+        if (!path) return "Path is required.";
+        const activity = getToolActivityLabel(READ_FILE_TOOL_NAME);
+        pushToolActivity(activity);
+        setToolUsage({ inProgress: true, name: READ_FILE_TOOL_NAME });
+        try {
+          const response = await invoke("read_file", { path });
+          return response ?? "Read complete.";
+        } catch (err) {
+          return toErrorMessage(err, "Read file failed.");
+        } finally {
+          completeToolActivity(READ_FILE_TOOL_NAME);
+          setToolUsage({
+            inProgress: false,
+            name: READ_FILE_TOOL_NAME,
+            lastUsedAt: Date.now(),
+          });
+        }
+      },
+    });
+    const searchInFilesTool = tool({
+      name: SEARCH_IN_FILES_TOOL_NAME,
+      description: "Search for a string across project files.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Text to search for.",
+          },
+          root: {
+            type: "string",
+            description:
+              "Project root path. Defaults to the app working directory.",
+          },
+          max_results: {
+            type: "number",
+            description: "Max number of matches to return.",
+          },
+          case_insensitive: {
+            type: "boolean",
+            description: "Use case-insensitive matching.",
+          },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+      strict: false,
+      execute: async (args?: {
+        query?: string;
+        root?: string;
+        max_results?: number;
+        case_insensitive?: boolean;
+      }) => {
+        if (!isToolEnabled(SEARCH_IN_FILES_TOOL_NAME, options)) {
+          return "Search tool is disabled.";
+        }
+        const query = typeof args?.query === "string" ? args.query.trim() : "";
+        if (!query) return "Query is required.";
+        const root = typeof args?.root === "string" ? args.root.trim() : undefined;
+        const maxResults =
+          typeof args?.max_results === "number" ? args.max_results : undefined;
+        const caseInsensitive =
+          typeof args?.case_insensitive === "boolean"
+            ? args.case_insensitive
+            : false;
+        const activity = getToolActivityLabel(SEARCH_IN_FILES_TOOL_NAME);
+        pushToolActivity(activity);
+        setToolUsage({ inProgress: true, name: SEARCH_IN_FILES_TOOL_NAME });
+        try {
+          const response = await invoke("search_in_files", {
+            query,
+            root,
+            max_results: maxResults,
+            case_insensitive: caseInsensitive,
+          });
+          return response ?? "Search complete.";
+        } catch (err) {
+          return toErrorMessage(err, "Search failed.");
+        } finally {
+          completeToolActivity(SEARCH_IN_FILES_TOOL_NAME);
+          setToolUsage({
+            inProgress: false,
+            name: SEARCH_IN_FILES_TOOL_NAME,
+            lastUsedAt: Date.now(),
+          });
+        }
+      },
+    });
+    const toolEntries = [
+      { name: "capture_screen_image", tool: captureTool },
+      { name: WRITE_FILE_TOOL_NAME, tool: writeFileTool },
+      { name: LIST_PROJECT_FILES_TOOL_NAME, tool: listProjectFilesTool },
+      { name: READ_FILE_TOOL_NAME, tool: readFileTool },
+      { name: SEARCH_IN_FILES_TOOL_NAME, tool: searchInFilesTool },
+      { name: CLIPBOARD_CONTEXT_TOOL_NAME, tool: clipboardTool },
+    ];
+    const agentTools = toolEntries
+      .filter((entry) => isToolEnabled(entry.name, options))
+      .map((entry) => entry.tool);
     agentRef.current = new Agent({
       name: "Overlay Assistant",
       instructions: AGENT_INSTRUCTIONS,
@@ -327,12 +633,16 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
     setIsSending(false);
     setError(null);
     toolActivityRef.current = undefined;
+    pendingToolMessageIdRef.current = null;
+    activeStreamIdRef.current = null;
   };
 
   const clearHistory = () => {
     setMessages([]);
     historyRef.current = [];
     toolActivityRef.current = undefined;
+    pendingToolMessageIdRef.current = null;
+    activeStreamIdRef.current = null;
   };
 
   const regenerateLastResponse = async () => {
@@ -408,8 +718,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
                 ),
               ),
             ]);
-            const activity = getToolActivityLabel(CLIPBOARD_CONTEXT_TOOL_NAME);
-            addToolActivity(activity);
+            pushToolActivity(getToolCompletedLabel(CLIPBOARD_CONTEXT_TOOL_NAME));
           }
         } catch {
           // Ignore clipboard errors and continue without it.
@@ -426,14 +735,25 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
       const result = await runner.run(agent, inputItems, {
         stream: true,
         signal: abortControllerRef.current.signal,
+        maxTurns,
       });
 
-      const streamId = streamMessageIdRef.current + 1;
+      const pendingStreamId = pendingToolMessageIdRef.current;
+      const streamId =
+        pendingStreamId ?? streamMessageIdRef.current + 1;
       streamMessageIdRef.current = streamId;
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "", streamId },
-      ]);
+      activeStreamIdRef.current = streamId;
+      pendingToolMessageIdRef.current = null;
+      setMessages((prev) => {
+        if (pendingStreamId !== null) {
+          return prev.map((message) =>
+            message.streamId === streamId
+              ? { ...message, content: "", streamId }
+              : message,
+          );
+        }
+        return [...prev, { role: "assistant", content: "", streamId }];
+      });
 
       const stream = result.toTextStream();
       const reader = stream.getReader();
@@ -454,7 +774,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
 
       await result.completed;
       if (requestId !== requestIdRef.current) return;
-      const toolActivity = toolActivityRef.current;
+      const toolActivity = finalizeToolActivities(toolActivityRef.current);
       toolActivityRef.current = undefined;
       setMessages((prev) =>
         prev.map((message) =>
@@ -472,6 +792,7 @@ export function useAgentsSdkChat(options?: UseAgentsSdkOptions) {
         setIsSending(false);
       }
       abortControllerRef.current = null;
+      activeStreamIdRef.current = null;
     }
   }
 

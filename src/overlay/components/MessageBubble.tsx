@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/chain-of-thought";
 import {
   getToolIconByActivity,
+  getToolCompletionForActivity,
   isToolActivityShimmer,
 } from "../tools/registry";
 import { RotateCcw } from "lucide-react";
@@ -136,14 +137,23 @@ function normalizeToolActivities(activity?: string | string[]) {
   return items.map((item) => item.trim()).filter(Boolean);
 }
 
-function buildToolEntries(activities: string[], hasScreenshot: boolean) {
-  const entries = activities.map((label) => ({
-    key: label,
-    label,
-    shimmer: isToolActivityShimmer(label),
-    icon: getToolIconByActivity(label),
-    showImage: false,
-  }));
+function buildToolEntries(
+  activities: string[],
+  hasScreenshot: boolean,
+  isStreaming: boolean,
+) {
+  const entries = activities.map((label) => {
+    const displayLabel = isStreaming
+      ? label
+      : getToolCompletionForActivity(label);
+    return {
+      key: displayLabel,
+      label: displayLabel,
+      shimmer: isStreaming && isToolActivityShimmer(label),
+      icon: getToolIconByActivity(displayLabel),
+      showImage: false,
+    };
+  });
   if (!hasScreenshot) return entries;
   for (let i = entries.length - 1; i >= 0; i -= 1) {
     if (entries[i].label.toLowerCase().includes("screen")) {
@@ -202,7 +212,11 @@ function MessageBubbleComponent({
     thinkingDurationMs && thinkingDurationMs > 0
       ? formatDuration(thinkingDurationMs)
       : null;
-  const toolEntries = buildToolEntries(toolActivities, hasInlineImage);
+  const toolEntries = buildToolEntries(
+    toolActivities,
+    hasInlineImage,
+    isStreaming,
+  );
 
   return (
     <div className="space-y-2">
